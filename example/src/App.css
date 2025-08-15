@@ -2,41 +2,131 @@
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
+}
+
+.app {
+  text-align: left;
+}
+
+.app h1 {
   text-align: center;
+  margin-bottom: 2rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+section {
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+section h2 {
+  margin-top: 0;
+  color: #333;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Upload Section */
+.upload-zone {
+  margin: 1rem 0;
 }
 
-.card {
-  padding: 2em;
+/* Transformation Controls */
+.controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
 }
 
-.read-the-docs {
-  color: #888;
+.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.controls input,
+.controls select {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Gallery */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.image-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #f9f9f9;
+}
+
+.gallery-image {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.image-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.image-info p {
+  margin: 0.25rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.delete-button {
+  background: #ff4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.delete-button:hover {
+  background: #cc3333;
+}
+
+.image-loader,
+.image-error {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  border-radius: 4px;
+  color: #666;
+}
+
+.image-error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* API Section */
+.api-section ul {
+  padding-left: 1.5rem;
+}
+
+.api-section li {
+  margin: 0.5rem 0;
+}
+
+code {
+  background: #f5f5f5;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.9em;
 }

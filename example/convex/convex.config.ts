@@ -1,7 +1,7 @@
 import { defineApp } from "convex/server";
-import shardedCounter from "@convex-dev/sharded-counter/convex.config";
+import cloudinary from "../../src/component/convex.config.js";
 
 const app = defineApp();
-app.use(shardedCounter);
+app.use(cloudinary);
 
 export default app;

@@ -1,17 +1,23 @@
 {
   "name": "cloudinary-component",
-  "description": "A sharded counter component for Convex.",
-  "repository": "github:get-convex/sharded-counter",
-  "homepage": "https://github.com/get-convex/sharded-counter#readme",
+  "description": "A Cloudinary integration component for Convex providing image upload, transformation, and management capabilities.",
+  "repository": "github:your-username/cloudinary-component",
+  "homepage": "https://github.com/your-username/cloudinary-component#readme",
   "bugs": {
     "email": "support@convex.dev",
-    "url": "https://github.com/get-convex/sharded-counter/issues"
+    "url": "https://github.com/your-username/cloudinary-component/issues"
   },
   "version": "0.1.0",
   "license": "Apache-2.0",
   "keywords": [
     "convex",
-    "component"
+    "component",
+    "cloudinary",
+    "image",
+    "upload",
+    "transformation",
+    "media",
+    "cdn"
   ],
   "type": "module",
   "scripts": {
@@ -19,7 +25,7 @@
     "dashboard": "cd example && npx convex dashboard",
     "dev": "run-p 'example' 'build:watch'",
     "setup": "npm i && npm run build && cd example && npm i && npx convex dev --once",
-    "build:watch": "cd src && npx chokidar '../tsconfig.json' '*.ts' 'react/**/*.ts' 'component/**/*.ts' 'client/**/*.ts' -c 'npm run build' --initial",
+    "build:watch": "cd src && npx chokidar '../tsconfig.json' '*.ts' 'react/**/*.tsx' 'component/**/*.ts' 'client/**/*.ts' -c 'npm run build' --initial",
     "build": "tsc --project ./tsconfig.build.json && tsc-alias -p tsconfig.build.json && echo '{\\n  \"type\": \"module\"\\n}' > dist/package.json",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist tsconfig.build.tsbuildinfo",
@@ -45,7 +51,7 @@
       "default": "./dist/client/index.js"
     },
     "./react": {
-      "@convex-dev/component-source": "./src/react/index.ts",
+      "@convex-dev/component-source": "./src/react/index.tsx",
       "types": "./dist/react/index.d.ts",
       "default": "./dist/react/index.js"
     },
@@ -55,6 +61,7 @@
       "default": "./dist/component/convex.config.js"
     }
   },
+  "dependencies": {},
   "peerDependencies": {
     "convex": "^1.24.8",
     "react": "^18.3.1 || ^19.0.0"
@@ -64,6 +71,7 @@
     "@edge-runtime/vm": "^5.0.0",
     "@eslint/js": "9.29.0",
     "@types/node": "18.17.0",
+    "@types/react": "^19.1.10",
     "chokidar-cli": "3.0.0",
     "convex-test": "0.0.37",
     "eslint": "9.29.0",
