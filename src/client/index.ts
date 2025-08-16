@@ -57,29 +57,25 @@ export interface ListAssetsOptions {
   order?: "asc" | "desc";
 }
 
+export interface CloudinaryConfig {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
 export type CloudinaryComponent = UseApi<Mounts>;
 
 export class CloudinaryClient {
   constructor(
     public component: CloudinaryComponent,
-    public options?: {
-      // Common parameters:
-      // logLevel
-    }
+    public config: CloudinaryConfig
   ) {}
 
   /**
    * Factory method to create a configured Cloudinary client
    * Similar to how Resend works
    */
-  static create(
-    component: CloudinaryComponent,
-    config: {
-      cloudName: string;
-      apiKey: string;
-      apiSecret: string;
-    }
-  ) {
+  static create(component: CloudinaryComponent, config: CloudinaryConfig) {
     return new CloudinaryClient(component, config);
   }
 
@@ -87,8 +83,9 @@ export class CloudinaryClient {
    * Upload a file to Cloudinary using direct API calls
    */
   async upload(ctx: RunActionCtx, base64Data: string, options?: UploadOptions) {
-    return ctx.runAction((this.component.lib as any).upload, {
+    return ctx.runAction(this.component.lib.upload, {
       base64Data,
+      config: this.config,
       ...options,
     });
   }
@@ -101,9 +98,10 @@ export class CloudinaryClient {
     publicId: string,
     transformation: CloudinaryTransformation
   ) {
-    return ctx.runQuery((this.component.lib as any).transform, {
+    return ctx.runQuery(this.component.lib.transform, {
       publicId,
       transformation,
+      config: this.config,
     });
   }
 
@@ -111,8 +109,9 @@ export class CloudinaryClient {
    * Delete an asset from Cloudinary and the database using direct API calls
    */
   async delete(ctx: RunActionCtx, publicId: string) {
-    return ctx.runAction((this.component.lib as any).deleteAsset, {
+    return ctx.runAction(this.component.lib.deleteAsset, {
       publicId,
+      config: this.config,
     });
   }
 
@@ -120,14 +119,20 @@ export class CloudinaryClient {
    * List assets with optional filtering
    */
   async list(ctx: RunQueryCtx, options?: ListAssetsOptions) {
-    return ctx.runQuery((this.component.lib as any).listAssets, options || {});
+    return ctx.runQuery(this.component.lib.listAssets, {
+      config: this.config,
+      ...options,
+    });
   }
 
   /**
    * Get a single asset by public ID
    */
   async getAsset(ctx: RunQueryCtx, publicId: string) {
-    return ctx.runQuery((this.component.lib as any).getAsset, { publicId });
+    return ctx.runQuery(this.component.lib.getAsset, {
+      publicId,
+      config: this.config,
+    });
   }
 
   /**
@@ -138,7 +143,7 @@ export class CloudinaryClient {
     publicId: string,
     updates: { tags?: string[]; metadata?: any }
   ) {
-    return ctx.runMutation((this.component.lib as any).updateAsset, {
+    return ctx.runMutation(this.component.lib.updateAsset, {
       publicId,
       ...updates,
     });

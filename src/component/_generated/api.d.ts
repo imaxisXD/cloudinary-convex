@@ -34,14 +34,22 @@ export type Mounts = {
     deleteAsset: FunctionReference<
       "action",
       "public",
-      { publicId: string },
+      {
+        config: { apiKey: string; apiSecret: string; cloudName: string };
+        publicId: string;
+      },
       { error?: string; success: boolean }
     >;
     getAsset: FunctionReference<
       "query",
       "public",
-      { publicId: string },
       {
+        config: { apiKey: string; apiSecret: string; cloudName: string };
+        publicId: string;
+      },
+      {
+        _creationTime: number;
+        _id: string;
         bytes?: number;
         cloudinaryUrl: string;
         folder?: string;
@@ -63,6 +71,7 @@ export type Mounts = {
       "query",
       "public",
       {
+        config: { apiKey: string; apiSecret: string; cloudName: string };
         folder?: string;
         limit?: number;
         order?: "asc" | "desc";
@@ -71,6 +80,8 @@ export type Mounts = {
         userId?: string;
       },
       Array<{
+        _creationTime: number;
+        _id: string;
         bytes?: number;
         cloudinaryUrl: string;
         folder?: string;
@@ -92,6 +103,7 @@ export type Mounts = {
       "query",
       "public",
       {
+        config: { apiKey: string; apiSecret: string; cloudName: string };
         publicId: string;
         transformation: {
           crop?: string;
@@ -112,6 +124,8 @@ export type Mounts = {
       "public",
       { metadata?: any; publicId: string; tags?: Array<string> },
       {
+        _creationTime: number;
+        _id: string;
         bytes?: number;
         cloudinaryUrl: string;
         folder?: string;
@@ -134,6 +148,7 @@ export type Mounts = {
       "public",
       {
         base64Data: string;
+        config: { apiKey: string; apiSecret: string; cloudName: string };
         filename?: string;
         folder?: string;
         publicId?: string;

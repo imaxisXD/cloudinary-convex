@@ -4,7 +4,6 @@ import {
   query,
   action,
   internalMutation,
-  internalQuery,
 } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import {
@@ -29,6 +28,8 @@ const TransformationType = v.object({
 });
 
 const AssetType = v.object({
+  _id: v.id("assets"),
+  _creationTime: v.number(),
   publicId: v.string(),
   cloudinaryUrl: v.string(),
   secureUrl: v.string(),
@@ -308,34 +309,27 @@ function validateUploadOptions(options: Record<string, unknown>): void {
   }
 }
 
-// Get component configuration
-export const getConfig = internalQuery({
-  args: {},
-  returns: v.object({
-    cloudName: v.string(),
-    apiKey: v.string(),
-    apiSecret: v.string(),
-  }),
-  handler: async (ctx, _args) => {
-    // Component arguments are passed through the app configuration
-    // This will be populated by the defineApp configuration
-    const componentArgs = (
-      ctx as {
-        componentArgs?: {
-          cloudName: string;
-          apiKey: string;
-          apiSecret: string;
-        };
-      }
-    ).componentArgs;
-    if (!componentArgs) {
-      throw new Error(
-        "Component not configured. Please configure cloudName, apiKey, and apiSecret in your app.use() call."
-      );
-    }
-    return componentArgs;
-  },
-});
+// Internal function to validate config
+function validateConfig(config: {
+  cloudName?: string;
+  apiKey?: string;
+  apiSecret?: string;
+}) {
+  if (!config.cloudName) {
+    throw new Error("Cloudinary cloud name is required");
+  }
+  if (!config.apiKey) {
+    throw new Error("Cloudinary API key is required");
+  }
+  if (!config.apiSecret) {
+    throw new Error("Cloudinary API secret is required");
+  }
+  return config as {
+    cloudName: string;
+    apiKey: string;
+    apiSecret: string;
+  };
+}
 
 // Internal mutation to store asset in database
 export const storeAsset = internalMutation({
@@ -369,6 +363,11 @@ export const transform = query({
   args: {
     publicId: v.string(),
     transformation: TransformationType,
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
   },
   returns: v.object({
     transformedUrl: v.string(),
@@ -381,13 +380,7 @@ export const transform = query({
     }
 
     validateTransformation(args.transformation);
-
-    // Get component configuration
-    const config = await ctx.runQuery(internal.lib.getConfig, {});
-
-    if (!config.cloudName) {
-      throw new Error("Cloudinary cloud name not configured");
-    }
+    const config = validateConfig(args.config);
 
     // Validate public ID format
     if (!/^[a-zA-Z0-9/\-_.]+$/.test(args.publicId)) {
@@ -434,6 +427,11 @@ export const listAssets = query({
       v.union(v.literal("uploadedAt"), v.literal("updatedAt"))
     ),
     order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
   },
   returns: v.array(AssetType),
   handler: async (ctx, args) => {
@@ -477,6 +475,11 @@ export const listAssets = query({
 export const getAsset = query({
   args: {
     publicId: v.string(),
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
   },
   returns: v.union(AssetType, v.null()),
   handler: async (ctx, args) => {
@@ -535,6 +538,11 @@ export const upload = action({
     transformation: v.optional(TransformationType),
     publicId: v.optional(v.string()),
     userId: v.optional(v.string()),
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
   },
   returns: v.object({
     success: v.boolean(),
@@ -562,8 +570,8 @@ export const upload = action({
 
       validateUploadOptions(uploadOptions);
 
-      // Get Cloudinary credentials from component config
-      const config = await ctx.runQuery(internal.lib.getConfig, {});
+      // Validate Cloudinary credentials
+      const config = validateConfig(args.config);
 
       validateCloudinaryConfig(
         config.cloudName,
@@ -631,6 +639,11 @@ export const upload = action({
 export const deleteAsset = action({
   args: {
     publicId: v.string(),
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
   },
   returns: v.object({
     success: v.boolean(),
@@ -638,8 +651,8 @@ export const deleteAsset = action({
   }),
   handler: async (ctx, args) => {
     try {
-      // Get Cloudinary credentials from component config
-      const config = await ctx.runQuery(internal.lib.getConfig, {});
+      // Validate Cloudinary credentials
+      const config = validateConfig(args.config);
 
       validateCloudinaryConfig(
         config.cloudName,

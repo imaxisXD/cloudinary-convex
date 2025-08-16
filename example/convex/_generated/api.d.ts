@@ -44,14 +44,22 @@ export declare const components: {
       deleteAsset: FunctionReference<
         "action",
         "internal",
-        { publicId: string },
+        {
+          config: { apiKey: string; apiSecret: string; cloudName: string };
+          publicId: string;
+        },
         { error?: string; success: boolean }
       >;
       getAsset: FunctionReference<
         "query",
         "internal",
-        { publicId: string },
         {
+          config: { apiKey: string; apiSecret: string; cloudName: string };
+          publicId: string;
+        },
+        {
+          _creationTime: number;
+          _id: string;
           bytes?: number;
           cloudinaryUrl: string;
           folder?: string;
@@ -73,6 +81,7 @@ export declare const components: {
         "query",
         "internal",
         {
+          config: { apiKey: string; apiSecret: string; cloudName: string };
           folder?: string;
           limit?: number;
           order?: "asc" | "desc";
@@ -81,6 +90,8 @@ export declare const components: {
           userId?: string;
         },
         Array<{
+          _creationTime: number;
+          _id: string;
           bytes?: number;
           cloudinaryUrl: string;
           folder?: string;
@@ -102,6 +113,7 @@ export declare const components: {
         "query",
         "internal",
         {
+          config: { apiKey: string; apiSecret: string; cloudName: string };
           publicId: string;
           transformation: {
             crop?: string;
@@ -122,6 +134,8 @@ export declare const components: {
         "internal",
         { metadata?: any; publicId: string; tags?: Array<string> },
         {
+          _creationTime: number;
+          _id: string;
           bytes?: number;
           cloudinaryUrl: string;
           folder?: string;
@@ -144,6 +158,7 @@ export declare const components: {
         "internal",
         {
           base64Data: string;
+          config: { apiKey: string; apiSecret: string; cloudName: string };
           filename?: string;
           folder?: string;
           publicId?: string;

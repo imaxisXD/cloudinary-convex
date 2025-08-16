@@ -3,15 +3,38 @@ import { useAction, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState, useRef } from "react";
 
+// Define the image type based on the API response
+type CloudinaryImage = {
+  _creationTime: number;
+  _id: string;
+  bytes?: number;
+  cloudinaryUrl: string;
+  folder?: string;
+  format: string;
+  height?: number;
+  metadata?: any;
+  originalFilename?: string;
+  publicId: string;
+  secureUrl: string;
+  tags?: Array<string>;
+  transformations?: Array<any>;
+  updatedAt: number;
+  uploadedAt: number;
+  userId?: string;
+  width?: number;
+};
+
 function App() {
   const images = useQuery(api.example.listImages);
   const uploadImage = useAction(api.example.uploadImage);
   const deleteImage = useAction(api.example.deleteImage);
-  const getTransformedUrl = useQuery(api.example.getTransformedImageUrl, {
-    publicId: "sample",
-    width: 300,
-    height: 300,
-  });
+
+  // Remove the hardcoded transformation query
+  // const getTransformedUrl = useQuery(api.example.getTransformedImageUrl, {
+  //   publicId: "sample",
+  //   width: 300,
+  //   height: 300,
+  // });
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
@@ -19,7 +42,22 @@ function App() {
     width: 300,
     height: 300,
   });
+  const [selectedImageForTransform, setSelectedImageForTransform] = useState<
+    string | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Get transformed URL for the selected image
+  const getTransformedUrl = useQuery(
+    api.example.getTransformedImageUrl,
+    selectedImageForTransform
+      ? {
+          publicId: selectedImageForTransform,
+          width: transformSettings.width,
+          height: transformSettings.height,
+        }
+      : "skip"
+  );
 
   // Convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -53,6 +91,11 @@ function App() {
 
       setUploadResult(result);
       console.log("Upload success:", result);
+
+      // Auto-select the newly uploaded image for transformation
+      if (result.publicId) {
+        setSelectedImageForTransform(result.publicId);
+      }
 
       // Reset file input
       if (fileInputRef.current) {
@@ -90,19 +133,12 @@ function App() {
       <p>Testing direct Cloudinary REST API integration with Convex</p>
 
       {/* Upload Section */}
-      <section
-        style={{
-          margin: "20px 0",
-          padding: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-        }}
-      >
+      <section>
         <h2>📤 Upload Images</h2>
 
         {/* Transform Settings */}
-        <div style={{ marginBottom: "15px" }}>
-          <label style={{ marginRight: "10px" }}>
+        <div className="controls">
+          <label>
             Width:
             <input
               type="number"
@@ -115,7 +151,6 @@ function App() {
               }
               min="50"
               max="1000"
-              style={{ marginLeft: "5px", width: "80px" }}
             />
           </label>
           <label>
@@ -131,7 +166,6 @@ function App() {
               }
               min="50"
               max="1000"
-              style={{ marginLeft: "5px", width: "80px" }}
             />
           </label>
         </div>
@@ -143,20 +177,12 @@ function App() {
           accept="image/*"
           onChange={handleFileUpload}
           disabled={isUploading}
-          style={{ marginBottom: "10px" }}
         />
 
-        {isUploading && <p>🔄 Uploading...</p>}
+        {isUploading && <p className="loading">🔄 Uploading...</p>}
 
         {uploadResult && (
-          <div
-            style={{
-              margin: "10px 0",
-              padding: "10px",
-              backgroundColor: "#f0f8f0",
-              borderRadius: "4px",
-            }}
-          >
+          <div className="success-message">
             <p>✅ Upload Success!</p>
             <p>
               <strong>Public ID:</strong> {uploadResult.publicId}
@@ -182,50 +208,25 @@ function App() {
       </section>
 
       {/* Image Gallery */}
-      <section
-        style={{
-          margin: "20px 0",
-          padding: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-        }}
-      >
+      <section>
         <h2>🖼️ Uploaded Images</h2>
         {images === undefined ? (
-          <p>Loading images...</p>
+          <p className="loading">Loading images...</p>
         ) : images.length === 0 ? (
-          <p>No images uploaded yet. Upload some images above!</p>
+          <div className="empty-state">
+            <p>No images uploaded yet. Upload some images above!</p>
+          </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-              gap: "20px",
-            }}
-          >
-            {images.map((image) => (
-              <div
-                key={image.publicId}
-                style={{
-                  border: "1px solid #ccc",
-                  borderRadius: "8px",
-                  padding: "10px",
-                }}
-              >
+          <div className="image-grid">
+            {images.map((image: CloudinaryImage) => (
+              <div key={image.publicId} className="image-card">
                 <img
                   src={image.secureUrl}
                   alt={image.originalFilename || "Uploaded image"}
-                  style={{
-                    width: "100%",
-                    height: "200px",
-                    objectFit: "cover",
-                    borderRadius: "4px",
-                  }}
+                  className="gallery-image"
                 />
-                <div style={{ marginTop: "10px" }}>
-                  <h4 style={{ margin: "5px 0" }}>
-                    {image.originalFilename || image.publicId}
-                  </h4>
+                <div className="image-info">
+                  <h4>{image.originalFilename || image.publicId}</h4>
                   <p>
                     <strong>Format:</strong> {image.format}
                   </p>
@@ -245,15 +246,7 @@ function App() {
                   )}
                   <button
                     onClick={() => handleDeleteImage(image.publicId)}
-                    style={{
-                      backgroundColor: "#ff4444",
-                      color: "white",
-                      border: "none",
-                      padding: "8px 15px",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      marginTop: "10px",
-                    }}
+                    className="delete-button"
                   >
                     🗑️ Delete
                   </button>
@@ -265,62 +258,105 @@ function App() {
       </section>
 
       {/* Transformation Demo */}
-      {getTransformedUrl && (
-        <section
-          style={{
-            margin: "20px 0",
-            padding: "20px",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-          }}
-        >
-          <h2>🎨 Transformation Demo</h2>
-          <p>
-            This shows URL generation for transformations (if you have a
-            'sample' image):
+      <section>
+        <h2>
+          🎨 Transformation Demo ({transformSettings.width}×
+          {transformSettings.height})
+        </h2>
+        <p>
+          Select an image and adjust dimensions above to see real-time
+          transformations:
+        </p>
+
+        {/* Image Selection */}
+        {images && images.length > 0 && (
+          <div className="controls">
+            <label>
+              Select Image:
+              <select
+                value={selectedImageForTransform || ""}
+                onChange={(e) =>
+                  setSelectedImageForTransform(e.target.value || null)
+                }
+              >
+                <option value="">Choose an image...</option>
+                {images.map((image: CloudinaryImage) => (
+                  <option key={image.publicId} value={image.publicId}>
+                    {image.originalFilename || image.publicId}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {/* Transformation Display */}
+        {selectedImageForTransform && getTransformedUrl ? (
+          <div className="success-message">
+            <p>
+              🎯 <strong>Transformation Applied!</strong>
+            </p>
+            <p>
+              <strong>Original Image:</strong> {selectedImageForTransform}
+            </p>
+            <p>
+              <strong>Dimensions:</strong> {transformSettings.width} ×{" "}
+              {transformSettings.height}
+            </p>
+            <p>
+              <strong>Transformed URL:</strong>{" "}
+              <a
+                href={getTransformedUrl.transformedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View Transformed Image
+              </a>
+            </p>
+            <p>
+              <strong>Original URL:</strong>{" "}
+              <a
+                href={getTransformedUrl.secureUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View Original Image
+              </a>
+            </p>
+          </div>
+        ) : selectedImageForTransform ? (
+          <p className="loading">🔄 Generating transformation...</p>
+        ) : (
+          <p className="empty-state">
+            {images && images.length > 0
+              ? "Select an image above to see transformations"
+              : "Upload some images first to test transformations"}
           </p>
-          <p>
-            <strong>Transformed URL:</strong>{" "}
-            <a
-              href={getTransformedUrl.transformedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View Transformed
-            </a>
-          </p>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* API Status */}
-      <section
-        style={{
-          margin: "20px 0",
-          padding: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-        }}
-      >
+      <section className="api-section">
         <h2>📊 Component Status</h2>
         <ul>
-          <li>
+          <li className="status-icon">
             ✅ <strong>Upload:</strong> Direct REST API calls to Cloudinary
           </li>
-          <li>
+          <li className="status-icon">
             ✅ <strong>List Assets:</strong> Database integration working
           </li>
-          <li>
+          <li className="status-icon">
             ✅ <strong>Delete:</strong> Cloudinary + Database cleanup
           </li>
-          <li>
+          <li className="status-icon">
             ✅ <strong>Transformations:</strong> Applied during upload
           </li>
-          <li>
+          <li className="status-icon">
             ✅ <strong>No SDK Dependencies:</strong> Pure REST API integration
           </li>
         </ul>
 
-        <div style={{ marginTop: "15px", fontSize: "14px", color: "#666" }}>
+        <div style={{ marginTop: "15px", fontSize: "14px", color: "#64748b" }}>
           <p>
             <strong>Backend Functions Used:</strong>
           </p>
