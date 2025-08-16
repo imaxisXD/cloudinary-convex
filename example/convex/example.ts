@@ -31,6 +31,41 @@ const cloudinary = new CloudinaryClient(components.cloudinary, {
   apiSecret,
 });
 
+// Enhanced transformation options interface
+const TransformationOptions = v.object({
+  // Basic transformations
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  crop: v.optional(v.string()),
+  gravity: v.optional(v.string()),
+  quality: v.optional(v.union(v.string(), v.number())),
+  format: v.optional(v.string()),
+
+  // Effects and enhancements
+  effect: v.optional(v.string()),
+  radius: v.optional(v.union(v.number(), v.string())),
+  overlay: v.optional(v.string()),
+  underlay: v.optional(v.string()),
+
+  // Color and artistic effects
+  brightness: v.optional(v.number()),
+  contrast: v.optional(v.number()),
+  saturation: v.optional(v.number()),
+  hue: v.optional(v.number()),
+  gamma: v.optional(v.number()),
+
+  // Advanced transformations
+  angle: v.optional(v.number()),
+  flip: v.optional(v.string()),
+  rotation: v.optional(v.number()),
+  zoom: v.optional(v.number()),
+
+  // Responsive and optimization
+  responsive: v.optional(v.boolean()),
+  auto: v.optional(v.string()),
+  fetchFormat: v.optional(v.string()),
+});
+
 // Simple upload for testing - using the configured client
 export const uploadImage = action({
   args: {
@@ -163,8 +198,95 @@ export const listImagesWithFilters = query({
   },
 });
 
-// Example: Generate a transformed URL for an existing image - using the configured client
+// Enhanced transformation function with comprehensive options
 export const getTransformedImageUrl = query({
+  args: {
+    publicId: v.string(),
+    transformation: TransformationOptions,
+  },
+  returns: v.object({
+    transformedUrl: v.string(),
+    secureUrl: v.string(),
+    publicId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    // Generate transformation URL manually for comprehensive options
+    const transformations: string[] = [];
+
+    // Basic transformations
+    if (args.transformation.width)
+      transformations.push(`w_${args.transformation.width}`);
+    if (args.transformation.height)
+      transformations.push(`h_${args.transformation.height}`);
+    if (args.transformation.crop)
+      transformations.push(`c_${args.transformation.crop}`);
+    if (args.transformation.gravity)
+      transformations.push(`g_${args.transformation.gravity}`);
+    if (args.transformation.quality)
+      transformations.push(`q_${args.transformation.quality}`);
+    if (args.transformation.format)
+      transformations.push(`f_${args.transformation.format}`);
+
+    // Effects and enhancements
+    if (args.transformation.effect)
+      transformations.push(`e_${args.transformation.effect}`);
+    if (args.transformation.radius)
+      transformations.push(`r_${args.transformation.radius}`);
+    if (args.transformation.overlay)
+      transformations.push(`l_${args.transformation.overlay}`);
+    if (args.transformation.underlay)
+      transformations.push(`u_${args.transformation.underlay}`);
+
+    // Color and artistic effects
+    if (args.transformation.brightness)
+      transformations.push(`b_${args.transformation.brightness}`);
+    if (args.transformation.contrast)
+      transformations.push(`co_${args.transformation.contrast}`);
+    if (args.transformation.saturation)
+      transformations.push(`s_${args.transformation.saturation}`);
+    if (args.transformation.hue)
+      transformations.push(`hue_${args.transformation.hue}`);
+    if (args.transformation.gamma)
+      transformations.push(`g_${args.transformation.gamma}`);
+
+    // Advanced transformations
+    if (args.transformation.angle)
+      transformations.push(`a_${args.transformation.angle}`);
+    if (args.transformation.flip)
+      transformations.push(`fl_${args.transformation.flip}`);
+    if (args.transformation.rotation)
+      transformations.push(`a_${args.transformation.rotation}`);
+    if (args.transformation.zoom)
+      transformations.push(`z_${args.transformation.zoom}`);
+
+    // Responsive and optimization
+    if (args.transformation.responsive) transformations.push(`c_auto`);
+    if (args.transformation.auto) transformations.push(`f_auto,q_auto`);
+    if (args.transformation.fetchFormat)
+      transformations.push(`f_${args.transformation.fetchFormat}`);
+
+    // Build the transformation URL
+    let transformedUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
+
+    if (transformations.length > 0) {
+      transformedUrl += `/${transformations.join(",")}`;
+    }
+
+    transformedUrl += `/${args.publicId}`;
+
+    // Get the original secure URL for comparison
+    const originalUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${args.publicId}`;
+
+    return {
+      transformedUrl,
+      secureUrl: originalUrl,
+      publicId: args.publicId,
+    };
+  },
+});
+
+// Simple transformation function for basic width/height
+export const getTransformedImageUrlSimple = query({
   args: {
     publicId: v.string(),
     width: v.optional(v.number()),
@@ -175,12 +297,60 @@ export const getTransformedImageUrl = query({
     secureUrl: v.string(),
   }),
   handler: async (ctx, args) => {
-    // Use the configured cloudinary client
-    return await cloudinary.transform(ctx, args.publicId, {
-      width: args.width ?? 300,
-      height: args.height ?? 300,
-      crop: "fill",
-      quality: "auto",
-    });
+    // Generate simple transformation URL
+    const transformations: string[] = [];
+
+    if (args.width) transformations.push(`w_${args.width}`);
+    if (args.height) transformations.push(`h_${args.height}`);
+
+    let transformedUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
+
+    if (transformations.length > 0) {
+      transformedUrl += `/${transformations.join(",")}`;
+    }
+
+    transformedUrl += `/${args.publicId}`;
+
+    const originalUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${args.publicId}`;
+
+    return {
+      transformedUrl,
+      secureUrl: originalUrl,
+    };
+  },
+});
+
+// Get transformation presets for the frontend
+export const getTransformationPresets = query({
+  args: {},
+  returns: v.record(v.string(), v.any()),
+  handler: async (_ctx, _args) => {
+    return {
+      "Basic Resize": { width: 300, height: 300, crop: "fill" },
+      "Square Thumbnail": {
+        width: 150,
+        height: 150,
+        crop: "thumb",
+        gravity: "face",
+      },
+      Landscape: { width: 800, height: 400, crop: "fill" },
+      Portrait: { width: 400, height: 600, crop: "fill" },
+      Circle: { width: 200, height: 200, crop: "fill", radius: "max" },
+      "Rounded Corners": { width: 300, height: 300, crop: "fill", radius: 20 },
+      "Black & White": { effect: "blackwhite" },
+      Sepia: { effect: "sepia" },
+      Vintage: { effect: "art:audrey" },
+      "Oil Painting": { effect: "oil_paint:6" },
+      Sketch: { effect: "sketch" },
+      Blur: { effect: "blur:300" },
+      Sharpen: { effect: "sharpen" },
+      Brightness: { brightness: 20 },
+      Contrast: { contrast: 20 },
+      Saturation: { saturation: -50 },
+      Grayscale: { effect: "grayscale" },
+      Invert: { effect: "invert" },
+      Pixelate: { effect: "pixelate:15" },
+      Cartoon: { effect: "cartoonify:70" },
+    };
   },
 });
