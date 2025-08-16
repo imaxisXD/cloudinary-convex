@@ -2,29 +2,30 @@
 
 [![npm version](https://badge.fury.io/js/cloudinary-component.svg)](https://badge.fury.io/js/cloudinary-component)
 
-A comprehensive Cloudinary integration component for Convex that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support and React components.
+A comprehensive Cloudinary integration component for Convex that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support.
 
 <!-- START: Include on https://convex.dev/components -->
 
 ## Features
 
-✨ **Easy Image Upload**: Drag & drop or programmatic upload to Cloudinary  
-🎨 **Dynamic Transformations**: Real-time image transformations (resize, crop, effects)  
+✨ **Easy Image Upload**: Programmatic upload to Cloudinary with validation  
+🎨 **Dynamic Transformations**: Generate transformed URLs for existing images  
 🗃️ **Asset Management**: Track and manage all uploaded assets in your Convex database  
-⚛️ **React Components**: Pre-built React components and hooks  
 🛡️ **Type Safety**: Full TypeScript support with comprehensive type definitions  
 🔒 **Secure**: Environment-based credential management  
-📱 **Responsive**: Works seamlessly across devices
+📊 **Database Integration**: Automatic asset tracking with optimized indexes  
+🚀 **Client Wrapper**: Optional CloudinaryClient for simplified usage
 
 Why use this component?
 
 - **Direct API Integration**: Uses Cloudinary REST APIs directly instead of SDKs for better control and reduced dependencies
-- **Seamless Integration**: Native Convex integration with real-time updates
+- **Seamless Integration**: Native Convex integration with real-time database updates
 - **Production Ready**: Built-in error handling, validation, and secure signature generation
 - **Developer Experience**: Rich TypeScript types and intuitive API
 - **Performance**: Optimized image delivery through Cloudinary's global CDN
+- **Flexible Usage**: Use directly or with the convenient CloudinaryClient wrapper
 
-Found a bug? Feature request? [File it here](https://github.com/your-username/cloudinary-component/issues).
+Found a bug? Feature request? [File it here](https://github.com/imaxisXD/cloudinary-convex/issues).
 
 ## Pre-requisite: Convex
 
@@ -76,7 +77,94 @@ npx convex env set CLOUDINARY_API_SECRET your_api_secret_here
 
 ## Quick Start
 
-### Backend Usage
+### Option 1: Using CloudinaryClient (Recommended)
+
+The easiest way to use the component is with the CloudinaryClient wrapper, similar to how Resend works:
+
+```ts
+// convex/images.ts
+import { action, query } from "./_generated/server";
+import { components } from "./_generated/api";
+import { CloudinaryClient } from "cloudinary-component";
+import { v } from "convex/values";
+
+// Validate environment variables
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+if (!cloudName || !apiKey || !apiSecret) {
+  throw new Error("Cloudinary environment variables not set");
+}
+
+// Configure Cloudinary client
+const cloudinary = new CloudinaryClient(components.cloudinary, {
+  cloudName,
+  apiKey,
+  apiSecret,
+});
+
+export const uploadImage = action({
+  args: {
+    base64Data: v.string(),
+    filename: v.optional(v.string()),
+    folder: v.optional(v.string()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await cloudinary.upload(ctx, args.base64Data, {
+      filename: args.filename,
+      folder: args.folder || "uploads",
+      tags: ["user-content"],
+      transformation:
+        args.width || args.height
+          ? {
+              width: args.width || 400,
+              height: args.height || 400,
+              crop: "fill",
+              quality: "auto",
+            }
+          : undefined,
+    });
+  },
+});
+
+export const getImages = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.string(),
+      _creationTime: v.number(),
+      publicId: v.string(),
+      cloudinaryUrl: v.string(),
+      secureUrl: v.string(),
+      originalFilename: v.optional(v.string()),
+      format: v.string(),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
+      bytes: v.optional(v.number()),
+      transformations: v.optional(v.array(v.any())),
+      tags: v.optional(v.array(v.string())),
+      folder: v.optional(v.string()),
+      metadata: v.optional(v.any()),
+      uploadedAt: v.number(),
+      updatedAt: v.number(),
+      userId: v.optional(v.string()),
+    })
+  ),
+  handler: async (ctx) => {
+    return await cloudinary.list(ctx, {
+      limit: 20,
+      order: "desc",
+    });
+  },
+});
+```
+
+### Option 2: Direct Component Usage
+
+You can also use the component functions directly:
 
 ```ts
 // convex/images.ts
@@ -90,104 +178,28 @@ export const uploadImage = action({
     filename: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Use the component directly - no wrapper needed!
+    const config = {
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME!,
+      apiKey: process.env.CLOUDINARY_API_KEY!,
+      apiSecret: process.env.CLOUDINARY_API_SECRET!,
+    };
+
     return await ctx.runAction(components.cloudinary.lib.upload, {
       base64Data: args.base64Data,
       filename: args.filename,
       folder: "uploads",
       tags: ["user-content"],
-      transformation: {
-        width: 500,
-        height: 500,
-        crop: "fill",
-        quality: "auto",
-      },
+      config,
     });
   },
 });
-
-export const getImages = query({
-  args: {},
-  handler: async (ctx) => {
-    // Use the component directly - no wrapper needed!
-    return await ctx.runQuery(components.cloudinary.lib.listAssets, {
-      folder: "uploads",
-      limit: 20,
-      order: "desc",
-    });
-  },
-});
-```
-
-### React Frontend Usage
-
-```tsx
-// app/ImageGallery.tsx
-import {
-  CloudinaryUpload,
-  CloudinaryImage,
-  useCloudinaryAssets,
-} from "cloudinary-component/react";
-import { useQuery } from "convex/react";
-import { api, components } from "../convex/_generated/api";
-
-export function ImageGallery() {
-  const images = useQuery(api.images.getImages);
-
-  return (
-    <div>
-      {/* Upload Component */}
-      <CloudinaryUpload
-        component={components.cloudinary}
-        onUploadComplete={(result) => {
-          console.log("Upload complete:", result);
-        }}
-        options={{ folder: "uploads", tags: ["gallery"] }}
-        accept="image/*"
-        multiple
-      />
-
-      {/* Image Grid */}
-      <div className="image-grid">
-        {images?.map((image) => (
-          <CloudinaryImage
-            key={image.publicId}
-            component={components.cloudinary}
-            publicId={image.publicId}
-            transformation={{
-              width: 300,
-              height: 300,
-              crop: "fill",
-            }}
-            alt={image.originalFilename || "Uploaded image"}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
 ```
 
 ## API Reference
 
-### Direct Component Usage (Recommended)
+### CloudinaryClient Methods
 
-The easiest way is to use the component functions directly:
-
-```ts
-// Direct usage - recommended approach
-await ctx.runAction(components.cloudinary.lib.upload, { ... });
-await ctx.runQuery(components.cloudinary.lib.listAssets, { ... });
-await ctx.runAction(components.cloudinary.lib.deleteAsset, { ... });
-```
-
-### CloudinaryClient (Alternative Pattern)
-
-If you prefer a client wrapper pattern, you can also use the CloudinaryClient:
-
-#### Methods
-
-##### `upload(ctx, base64Data, options?)`
+#### `upload(ctx, base64Data, options?)`
 
 Upload a file to Cloudinary and store metadata in the database.
 
@@ -196,27 +208,80 @@ const result = await cloudinary.upload(ctx, base64Data, {
   filename: "example.jpg",
   folder: "uploads",
   tags: ["user-content"],
-  transformation: { width: 500, height: 500, crop: "fill" },
+  transformation: {
+    width: 500,
+    height: 500,
+    crop: "fill",
+  },
   publicId: "custom-id",
   userId: "user123",
 });
 ```
 
-##### `transform(ctx, publicId, transformation)`
+**Parameters:**
+
+- `ctx`: Convex action context
+- `base64Data`: Base64 encoded file data (required)
+- `options`: Upload options object (optional)
+
+**Upload Options:**
+
+- `filename`: Original filename (optional)
+- `folder`: Cloudinary folder path (optional)
+- `tags`: Array of tags for organization (optional)
+- `transformation`: Image transformation parameters (optional)
+- `publicId`: Custom public ID (optional)
+- `userId`: User identifier for multi-tenancy (optional)
+
+**Returns:**
+
+```ts
+{
+  success: boolean;
+  publicId?: string;
+  secureUrl?: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  bytes?: number;
+  error?: string;
+}
+```
+
+#### `transform(ctx, publicId, transformation)`
 
 Generate a transformed URL for an existing image.
 
 ```ts
-const { transformedUrl } = await cloudinary.transform(ctx, "sample-image", {
-  width: 300,
-  height: 300,
-  crop: "fill",
-  quality: "auto",
-  format: "webp",
-});
+const { transformedUrl, secureUrl } = await cloudinary.transform(
+  ctx,
+  "sample-image",
+  {
+    width: 300,
+    height: 300,
+    crop: "fill",
+    quality: "auto",
+    format: "webp",
+  }
+);
 ```
 
-##### `delete(ctx, publicId)`
+**Parameters:**
+
+- `ctx`: Convex query context
+- `publicId`: Cloudinary public ID (required)
+- `transformation`: Transformation parameters (required)
+
+**Returns:**
+
+```ts
+{
+  transformedUrl: string;
+  secureUrl: string;
+}
+```
+
+#### `delete(ctx, publicId)`
 
 Delete an image from both Cloudinary and the database.
 
@@ -224,7 +289,21 @@ Delete an image from both Cloudinary and the database.
 const result = await cloudinary.delete(ctx, "sample-image");
 ```
 
-##### `list(ctx, options?)`
+**Parameters:**
+
+- `ctx`: Convex action context
+- `publicId`: Cloudinary public ID (required)
+
+**Returns:**
+
+```ts
+{
+  success: boolean;
+  error?: string;
+}
+```
+
+#### `list(ctx, options?)`
 
 List stored assets with filtering and pagination.
 
@@ -234,11 +313,28 @@ const images = await cloudinary.list(ctx, {
   folder: "uploads",
   tags: ["featured"],
   limit: 10,
+  orderBy: "uploadedAt",
   order: "desc",
 });
 ```
 
-##### `getAsset(ctx, publicId)`
+**Parameters:**
+
+- `ctx`: Convex query context
+- `options`: List options (optional)
+
+**List Options:**
+
+- `userId`: Filter by user ID (optional)
+- `folder`: Filter by folder (optional)
+- `tags`: Filter by tags array (optional)
+- `limit`: Maximum number of results (optional, default: 50)
+- `orderBy`: Sort by "uploadedAt" or "updatedAt" (optional, default: "uploadedAt")
+- `order`: Sort order "asc" or "desc" (optional, default: "asc")
+
+**Returns:** Array of asset objects
+
+#### `getAsset(ctx, publicId)`
 
 Get detailed information about a specific asset.
 
@@ -246,7 +342,14 @@ Get detailed information about a specific asset.
 const asset = await cloudinary.getAsset(ctx, "sample-image");
 ```
 
-##### `updateAsset(ctx, publicId, updates)`
+**Parameters:**
+
+- `ctx`: Convex query context
+- `publicId`: Cloudinary public ID (required)
+
+**Returns:** Asset object or null if not found
+
+#### `updateAsset(ctx, publicId, updates)`
 
 Update asset metadata (tags, custom metadata).
 
@@ -257,109 +360,44 @@ const updated = await cloudinary.updateAsset(ctx, "sample-image", {
 });
 ```
 
-### React Hooks
+**Parameters:**
 
-#### `useCloudinaryUpload(component)`
+- `ctx`: Convex mutation context
+- `publicId`: Cloudinary public ID (required)
+- `updates`: Object with tags and/or metadata (required)
 
-Manage file uploads with progress tracking.
+**Returns:** Updated asset object or null if not found
 
-```tsx
-const { upload, isUploading, progress, error, result, reset } =
-  useCloudinaryUpload(components.cloudinary);
+### Direct Component Functions
 
-const handleFileUpload = async (file: File) => {
-  try {
-    const result = await upload(file, {
-      folder: "user-uploads",
-      tags: ["profile"],
-    });
-    console.log("Upload successful:", result);
-  } catch (error) {
-    console.error("Upload failed:", error);
-  }
-};
-```
+If you prefer to use the component directly without the client wrapper:
 
-#### `useCloudinaryImage(component, publicId, transformation?)`
-
-Generate transformed image URLs.
-
-```tsx
-const { transformedUrl, secureUrl, isLoading } = useCloudinaryImage(
-  components.cloudinary,
-  "sample-image",
-  { width: 400, height: 300, crop: "fill" }
-);
-```
-
-#### `useCloudinaryAssets(component, options?)`
-
-List assets with real-time updates.
-
-```tsx
-const { assets, isLoading } = useCloudinaryAssets(components.cloudinary, {
-  folder: "uploads",
-  limit: 20,
+```ts
+// Upload
+await ctx.runAction(components.cloudinary.lib.upload, {
+  base64Data: "...",
+  config: { cloudName, apiKey, apiSecret },
+  // ... other options
 });
-```
 
-#### `useCloudinaryOperations(component)`
+// Transform
+await ctx.runQuery(components.cloudinary.lib.transform, {
+  publicId: "sample",
+  transformation: { width: 300, height: 300 },
+  config: { cloudName, apiKey, apiSecret },
+});
 
-Asset management operations.
+// List assets
+await ctx.runQuery(components.cloudinary.lib.listAssets, {
+  folder: "uploads",
+  config: { cloudName, apiKey, apiSecret },
+});
 
-```tsx
-const { deleteAsset, updateAsset } = useCloudinaryOperations(
-  components.cloudinary
-);
-
-const handleDelete = async (publicId: string) => {
-  await deleteAsset(publicId);
-};
-```
-
-### React Components
-
-#### `<CloudinaryUpload>`
-
-Drag & drop file upload component.
-
-```tsx
-<CloudinaryUpload
-  component={components.cloudinary}
-  onUploadComplete={(result) => console.log(result)}
-  onUploadError={(error) => console.error(error)}
-  options={{
-    folder: "uploads",
-    tags: ["user-content"],
-  }}
-  accept="image/*"
-  multiple
-  className="upload-zone"
->
-  <div>Drop files here or click to upload</div>
-</CloudinaryUpload>
-```
-
-#### `<CloudinaryImage>`
-
-Optimized image component with transformation support.
-
-```tsx
-<CloudinaryImage
-  component={components.cloudinary}
-  publicId="sample-image"
-  transformation={{
-    width: 400,
-    height: 300,
-    crop: "fill",
-    quality: "auto",
-    format: "webp",
-  }}
-  alt="Sample image"
-  className="responsive-image"
-  loader={<div>Loading...</div>}
-  fallback={<div>Failed to load</div>}
-/>
+// Delete asset
+await ctx.runAction(components.cloudinary.lib.deleteAsset, {
+  publicId: "sample",
+  config: { cloudName, apiKey, apiSecret },
+});
 ```
 
 ## Transformation Options
@@ -368,62 +406,85 @@ The component supports all Cloudinary transformation parameters:
 
 ```ts
 interface CloudinaryTransformation {
-  width?: number; // Resize width
-  height?: number; // Resize height
-  crop?: string; // "fill" | "fit" | "crop" | "scale" | "thumb"
-  quality?: string; // "auto" | "best" | "good" | 1-100
-  format?: string; // "webp" | "jpg" | "png" | "avif"
-  gravity?: string; // "auto" | "face" | "center" | "north"
-  radius?: number | string; // Border radius or "max" for circle
+  width?: number; // Resize width (1-4000)
+  height?: number; // Resize height (1-4000)
+  crop?: string; // "fill" | "fit" | "crop" | "scale" | "thumb" | "pad" | "limit"
+  quality?: string | number; // "auto" | "best" | "good" | "eco" | "low" | 1-100
+  format?: string; // "webp" | "jpg" | "png" | "avif" | "gif" | etc.
+  gravity?: string; // "auto" | "face" | "center" | "north" | "south" | etc.
+  radius?: number | string; // Border radius (0-2000) or "max" for circle
   overlay?: string; // Overlay image public_id
   effect?: string; // "grayscale" | "blur" | "sepia" | etc.
 }
 ```
+
+## Database Schema
+
+The component automatically creates an `assets` table with the following structure:
+
+```ts
+{
+  _id: Id<"assets">,
+  _creationTime: number,
+  publicId: string,
+  cloudinaryUrl: string,
+  secureUrl: string,
+  originalFilename?: string,
+  format: string,
+  width?: number,
+  height?: number,
+  bytes?: number,
+  transformations?: any[],
+  tags?: string[],
+  folder?: string,
+  metadata?: any,
+  uploadedAt: number,
+  updatedAt: number,
+  userId?: string,
+}
+```
+
+**Indexes:**
+
+- `by_publicId`: Fast lookup by Cloudinary public ID
+- `by_userId`: Filter assets by user
+- `by_folder`: Filter assets by folder
+- `by_tags`: Filter assets by tags
+- `by_uploadedAt`: Sort by upload time
+
+## File Validation
+
+The component automatically validates:
+
+- **File Types**: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, and more
+- **File Size**: Maximum 10MB (configurable)
+- **Dimensions**: Width/height between 1-4000 pixels
+- **Format**: Valid file extensions and MIME types
+- **Security**: Safe filename and folder path validation
 
 ## Error Handling
 
 The component includes comprehensive error handling:
 
 ```ts
-// Server-side error handling
 export const uploadWithErrorHandling = action({
   args: { base64Data: v.string() },
   handler: async (ctx, args) => {
     try {
-      const result = await cloudinary.upload(ctx, args.base64Data);
+      const result = await cloudinary.upload(ctx, args.base64Data, {
+        folder: "uploads",
+      });
+
       if (!result.success) {
         throw new Error(result.error || "Upload failed");
       }
       return result;
     } catch (error) {
       console.error("Upload error:", error);
-      throw error; // Re-throw to handle in frontend
+      throw error;
     }
   },
 });
-```
-
-```tsx
-// React error handling
-function UploadComponent() {
-  const { upload, error } = useCloudinaryUpload(components.cloudinary);
-
-  const handleUpload = async (file: File) => {
-    try {
-      await upload(file);
-    } catch (error) {
-      // Handle upload error
-      setErrorMessage(error.message);
-    }
-  };
-
-  return (
-    <div>
-      {error && <div className="error">Upload failed: {error}</div>}
-      {/* Upload UI */}
-    </div>
-  );
-}
 ```
 
 ## Best Practices
@@ -439,8 +500,8 @@ function UploadComponent() {
 
 - Use appropriate transformations for your use case
 - Leverage Cloudinary's `f_auto,q_auto` for optimal delivery
-- Implement lazy loading for image galleries
-- Cache transformed URLs when possible
+- Implement asset cleanup for deleted content
+- Use database indexes for efficient queries
 
 ### Organization
 
@@ -449,12 +510,32 @@ function UploadComponent() {
 - Use meaningful public_ids for important assets
 - Implement asset cleanup for deleted content
 
+### Environment Setup
+
+Always validate environment variables:
+
+```ts
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+if (!cloudName || !apiKey || !apiSecret) {
+  throw new Error("Cloudinary environment variables not set");
+}
+
+const cloudinary = new CloudinaryClient(components.cloudinary, {
+  cloudName,
+  apiKey,
+  apiSecret,
+});
+```
+
 ## Example Project
 
 Run the complete example:
 
 ```bash
-git clone https://github.com/your-username/cloudinary-component
+git clone https://github.com/imaxisXD/cloudinary-convex
 cd cloudinary-component
 npm run setup
 npm run dev
@@ -462,10 +543,11 @@ npm run dev
 
 The example includes:
 
-- File upload with drag & drop
+- File upload with base64 conversion
 - Real-time transformation preview
 - Image gallery with management
 - Error handling demonstrations
+- Both CloudinaryClient and direct component usage examples
 
 ## Troubleshooting
 
@@ -494,6 +576,12 @@ The example includes:
 - Run `npx convex dev` to regenerate types
 - Ensure you're importing from the correct paths
 - Check that the component is properly installed in convex.config.ts
+
+**Missing config parameter:**
+
+- Always pass the config object with Cloudinary credentials
+- Use environment variables for sensitive data
+- Ensure config is passed to all component functions
 
 ## Contributing
 
