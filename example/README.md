@@ -4,10 +4,13 @@ This example demonstrates how to use the Cloudinary component with Convex for im
 
 ## Features Demonstrated
 
-- 📤 **File Upload**: Drag & drop or click to upload images
+- 📤 **File Upload**: Two upload methods based on file size
+  - 📄 **Base64 Upload**: Small files (< 5MB) through Convex
+  - 🚀 **Direct Upload**: Large files (≥ 5MB) directly to Cloudinary
 - 🖼️ **Image Display**: Show images with real-time transformations
 - 🎛️ **Transformation Controls**: Adjust width, height, and crop settings
 - 🗑️ **Asset Management**: Delete images from Cloudinary and database
+- 📊 **Upload Progress**: Real-time progress tracking for direct uploads
 - 📱 **Responsive Design**: Works on desktop and mobile
 - 🚀 **Direct API Calls**: No SDK dependencies, better performance and control
 - 🔒 **Secure**: Built-in signature generation for authenticated uploads
@@ -67,6 +70,36 @@ In a new terminal:
 ```bash
 npm run dev
 ```
+
+## Testing Upload Methods
+
+The example app automatically chooses the upload method based on file size:
+
+### Automatic Method Selection
+
+- **Small files (< 5MB)**: Uses base64 upload through Convex
+- **Large files (≥ 5MB)**: Uses direct upload to Cloudinary
+
+### Testing Different File Sizes
+
+1. **Test Small File Upload (Base64)**:
+
+   - Choose any image under 5MB
+   - Upload will go through Convex backend
+   - Progress shows "Processing base64 data..."
+
+2. **Test Large File Upload (Direct)**:
+   - Choose any image 5MB or larger
+   - Upload goes directly to Cloudinary
+   - Progress bar shows real-time upload progress
+
+### What You'll See
+
+- **File size detection** in the UI
+- **Upload method** displayed during upload
+- **Progress tracking** for direct uploads
+- **Success message** showing which method was used
+- **Console logs** showing the upload flow
 
 ## Usage Examples
 

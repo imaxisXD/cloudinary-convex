@@ -50,6 +50,64 @@ export declare const components: {
         },
         { error?: string; success: boolean }
       >;
+      finalizeUpload: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          folder?: string;
+          publicId: string;
+          uploadResult: {
+            bytes?: number;
+            created_at?: string;
+            folder?: string;
+            format: string;
+            height?: number;
+            original_filename?: string;
+            public_id: string;
+            secure_url: string;
+            tags?: Array<string>;
+            url: string;
+            width?: number;
+          };
+          userId?: string;
+        },
+        string
+      >;
+      generateUploadCredentials: FunctionReference<
+        "action",
+        "internal",
+        {
+          config: { apiKey: string; apiSecret: string; cloudName: string };
+          filename?: string;
+          folder?: string;
+          publicId?: string;
+          tags?: Array<string>;
+          transformation?: {
+            crop?: string;
+            effect?: string;
+            format?: string;
+            gravity?: string;
+            height?: number;
+            overlay?: string;
+            quality?: string;
+            radius?: number | string;
+            width?: number;
+          };
+          userId?: string;
+        },
+        {
+          uploadParams: {
+            api_key: string;
+            folder?: string;
+            public_id?: string;
+            signature: string;
+            tags?: string;
+            timestamp: string;
+            transformation?: string;
+          };
+          uploadUrl: string;
+        }
+      >;
       getAsset: FunctionReference<
         "query",
         "internal",

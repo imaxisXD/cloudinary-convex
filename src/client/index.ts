@@ -7,19 +7,26 @@ import type {
   RunQueryCtx,
   RunActionCtx,
 } from "./types.js";
+import {
+  uploadDirectToCloudinary,
+  isLargeFile,
+  validateFile,
+  type UploadCredentials,
+  type DirectUploadOptions,
+  type UploadProgressCallback,
+  type CloudinaryUploadResponse,
+  type CloudinaryTransformation,
+  type FileValidationOptions,
+} from "./upload-utils.js";
 
-// Types for Cloudinary operations
-export interface CloudinaryTransformation {
-  width?: number;
-  height?: number;
-  crop?: string;
-  quality?: string;
-  format?: string;
-  gravity?: string;
-  radius?: number | string;
-  overlay?: string;
-  effect?: string;
+// Re-export CloudinaryTransformation with client-friendly quality type
+export interface ClientCloudinaryTransformation
+  extends Omit<CloudinaryTransformation, "quality"> {
+  quality?: string | number; // Allow both for client convenience, will be converted to string
 }
+
+// For backward compatibility, re-export as CloudinaryTransformation
+export type { ClientCloudinaryTransformation as CloudinaryTransformation };
 
 export interface CloudinaryAsset {
   publicId: string;
@@ -83,10 +90,25 @@ export class CloudinaryClient {
    * Upload a file to Cloudinary using direct API calls
    */
   async upload(ctx: RunActionCtx, base64Data: string, options?: UploadOptions) {
+    // Transform the options to match backend expectations
+    const backendOptions = {
+      ...options,
+      transformation: options?.transformation
+        ? {
+            ...options.transformation,
+            // Convert number quality to string for backend compatibility
+            quality:
+              options.transformation.quality !== undefined
+                ? String(options.transformation.quality)
+                : undefined,
+          }
+        : undefined,
+    };
+
     return ctx.runAction(this.component.lib.upload, {
       base64Data,
       config: this.config,
-      ...options,
+      ...backendOptions,
     });
   }
 
@@ -98,9 +120,19 @@ export class CloudinaryClient {
     publicId: string,
     transformation: CloudinaryTransformation
   ) {
+    // Transform the options to match backend expectations
+    const backendTransformation = {
+      ...transformation,
+      // Convert number quality to string for backend compatibility
+      quality:
+        transformation.quality !== undefined
+          ? String(transformation.quality)
+          : undefined,
+    };
+
     return ctx.runQuery(this.component.lib.transform, {
       publicId,
-      transformation,
+      transformation: backendTransformation,
       config: this.config,
     });
   }
@@ -150,15 +182,129 @@ export class CloudinaryClient {
   }
 
   /**
+   * Generate upload credentials for direct client-side upload
+   */
+  async generateUploadCredentials(
+    ctx: RunActionCtx,
+    options?: DirectUploadOptions
+  ): Promise<UploadCredentials> {
+    // Transform the options to match backend expectations
+    const backendOptions = {
+      ...options,
+      transformation: options?.transformation
+        ? {
+            ...options.transformation,
+            // Convert number quality to string for backend compatibility
+            quality:
+              options.transformation.quality !== undefined
+                ? String(options.transformation.quality)
+                : undefined,
+          }
+        : undefined,
+    };
+
+    const result = await ctx.runAction(
+      this.component.lib.generateUploadCredentials,
+      {
+        config: this.config,
+        ...backendOptions,
+      }
+    );
+
+    return {
+      uploadUrl: result.uploadUrl,
+      uploadParams: result.uploadParams,
+    };
+  }
+
+  /**
+   * Upload a file directly to Cloudinary (bypassing Convex for the file transfer)
+   * This is ideal for large files as it avoids the 16MB Convex argument limit
+   */
+  async uploadDirect(
+    ctx: RunActionCtx,
+    file: File,
+    options?: DirectUploadOptions & {
+      onProgress?: UploadProgressCallback;
+      validation?: FileValidationOptions;
+    }
+  ): Promise<CloudinaryUploadResponse> {
+    try {
+      // Validate file if options provided
+      if (options?.validation) {
+        await validateFile(file, options.validation);
+      }
+
+      // Compress file if options provided
+      const uploadFile = file;
+
+      // Step 1: Get upload credentials from backend
+      const credentials = await this.generateUploadCredentials(ctx, {
+        filename: options?.filename || file.name,
+        folder: options?.folder,
+        tags: options?.tags,
+        transformation: options?.transformation,
+        publicId: options?.publicId,
+        userId: options?.userId,
+      });
+
+      // Step 2: Upload directly to Cloudinary
+      const uploadResult = await uploadDirectToCloudinary(
+        uploadFile,
+        credentials,
+        options?.onProgress
+      );
+
+      // Step 3: Store metadata in database
+      await ctx.runMutation(this.component.lib.finalizeUpload, {
+        publicId: uploadResult.public_id,
+        uploadResult,
+        userId: options?.userId,
+        folder: options?.folder,
+      });
+
+      return uploadResult;
+    } catch (error) {
+      console.error("Direct upload failed:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Helper method to convert File to base64 string
+   * Only works in browser environments with FileReader support
    */
   static async fileToBase64(file: File): Promise<string> {
+    if (typeof FileReader === "undefined") {
+      throw new Error(
+        "fileToBase64 requires a browser environment with FileReader support. " +
+          "For server-side usage, use upload() method with base64 data directly."
+      );
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+  }
+
+  /**
+   * Check if a file is considered large and should use direct upload
+   */
+  static isLargeFile(file: File, threshold?: number): boolean {
+    return isLargeFile(file, threshold);
+  }
+
+  /**
+   * Validate a file before upload
+   */
+  static async validateFile(
+    file: File,
+    options?: FileValidationOptions
+  ): Promise<void> {
+    return validateFile(file, options);
   }
 
   /**

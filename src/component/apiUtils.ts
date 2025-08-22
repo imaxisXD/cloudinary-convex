@@ -239,6 +239,151 @@ export function generateTransformationUrl(
   };
 }
 
+// Generate signature for direct client uploads (browser to Cloudinary)
+export async function generateDirectUploadSignature(
+  params: Record<string, unknown>,
+  apiSecret: string
+): Promise<{ signature: string; timestamp: number }> {
+  const timestamp = Math.round(Date.now() / 1000);
+  const paramsWithTimestamp: Record<string, unknown> = { ...params, timestamp };
+
+  // Remove signature if it exists (shouldn't, but just in case)
+  const { signature: _, ...signatureParams } = paramsWithTimestamp as Record<
+    string,
+    unknown
+  > & { signature?: unknown };
+
+  // Sort parameters alphabetically and create query string
+  const sortedParams = Object.keys(signatureParams)
+    .sort()
+    .map((key) => `${key}=${signatureParams[key]}`)
+    .join("&");
+
+  // Create signature using SHA-1
+  const signatureString = `${sortedParams}${apiSecret}`;
+  const signature = await crypto.subtle.digest(
+    "SHA-1",
+    new TextEncoder().encode(signatureString)
+  );
+  const hashArray = new Uint8Array(signature);
+  const signatureResult = Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return { signature: signatureResult, timestamp };
+}
+
+// Verify upload completion by checking if asset exists in Cloudinary
+export async function verifyUploadCompletion(
+  cloudName: string,
+  apiKey: string,
+  apiSecret: string,
+  publicId: string,
+  resourceType: string = "image"
+): Promise<boolean> {
+  try {
+    const adminUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+
+    // Generate signature for admin API call
+    const params = { public_id: publicId };
+    const { signature, timestamp } = await generateSignature(params, apiSecret);
+
+    // Make API call to check if asset exists
+    const response = await fetch(adminUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${btoa(`${apiKey}:${apiSecret}`)}`,
+      },
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.warn("Failed to verify upload completion:", error);
+    return false; // Assume upload exists if verification fails
+  }
+}
+
+// Generate upload parameters for direct client upload
+export interface DirectUploadCredentials {
+  uploadUrl: string;
+  uploadParams: {
+    api_key: string;
+    timestamp: string;
+    signature: string;
+    [key: string]: string;
+  };
+}
+
+export async function generateDirectUploadCredentials(
+  cloudName: string,
+  apiKey: string,
+  apiSecret: string,
+  options: {
+    folder?: string;
+    tags?: string[];
+    transformation?: CloudinaryTransformation;
+    publicId?: string;
+    resourceType?: string;
+  } = {}
+): Promise<DirectUploadCredentials> {
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${options.resourceType || "image"}/upload`;
+
+  // Build parameters for signature generation (EXCLUDE api_key)
+  const paramsToSign: Record<string, unknown> = {};
+
+  if (options.folder) paramsToSign.folder = options.folder;
+  if (options.tags && options.tags.length > 0) {
+    paramsToSign.tags = options.tags.join(",");
+  }
+  if (options.publicId) paramsToSign.public_id = options.publicId;
+  if (options.transformation) {
+    const transformationString = transformationToString(options.transformation);
+    if (transformationString) {
+      paramsToSign.transformation = transformationString;
+    }
+  }
+
+  // Generate signature (without api_key)
+  console.log("Debug: Parameters being signed:", paramsToSign);
+  const { signature, timestamp } = await generateDirectUploadSignature(
+    paramsToSign,
+    apiSecret
+  );
+  console.log(
+    "Debug: Generated signature:",
+    signature,
+    "timestamp:",
+    timestamp
+  );
+
+  // Build final upload parameters (INCLUDE api_key for the actual upload)
+  const uploadParams: Record<string, unknown> = {
+    api_key: apiKey,
+    timestamp: timestamp.toString(),
+    signature: signature,
+  };
+
+  // Add the other parameters to the upload params
+  if (options.folder) uploadParams.folder = options.folder;
+  if (options.tags && options.tags.length > 0) {
+    uploadParams.tags = options.tags.join(",");
+  }
+  if (options.publicId) uploadParams.public_id = options.publicId;
+  if (options.transformation) {
+    const transformationString = transformationToString(options.transformation);
+    if (transformationString) {
+      uploadParams.transformation = transformationString;
+    }
+  }
+
+  console.log("Debug: Final upload parameters:", uploadParams);
+
+  return {
+    uploadUrl,
+    uploadParams: uploadParams as DirectUploadCredentials["uploadParams"],
+  };
+}
+
 // Validate environment variables
 export function validateCloudinaryConfig(
   cloudName?: string,

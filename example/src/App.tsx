@@ -2,6 +2,13 @@ import "./App.css";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState, useRef, useMemo, useEffect } from "react";
+import { CloudinaryClient } from "../../src/client/index.js";
+import {
+  uploadDirectToCloudinary,
+  isLargeFile,
+  type UploadCredentials,
+} from "../../src/client/upload-utils.js";
+import { components } from "../convex/_generated/api.js";
 
 type CloudinaryImage = {
   _creationTime: number;
@@ -80,12 +87,22 @@ function App() {
   const images = useQuery(api.example.listImages);
   const uploadImage = useAction(api.example.uploadImage);
   const deleteImage = useAction(api.example.deleteImage);
+  const uploadImageDirect = useAction(api.example.uploadImageDirect);
+  const finalizeDirectUpload = useAction(api.example.finalizeDirectUpload);
 
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMethod, setUploadMethod] = useState<"base64" | "direct" | null>(
+    null
+  );
+  const [fileSize, setFileSize] = useState<number | null>(null);
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [selectedImageForTransform, setSelectedImageForTransform] =
     useState<CloudinaryImage | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Note: Frontend doesn't need Cloudinary credentials
+  // All uploads go through backend actions which have the proper credentials
 
   // Clear selected image if it no longer exists in the images list
   useEffect(() => {
@@ -179,30 +196,79 @@ function App() {
     try {
       setIsUploading(true);
       setUploadResult(null);
+      setUploadProgress(0);
+      setFileSize(file.size);
 
-      const base64Data = await fileToBase64(file);
+      const fileSizeThreshold = 5 * 1024 * 1024; // 5MB threshold for demo
+      const isLarge = isLargeFile(file, fileSizeThreshold);
 
-      const result = await uploadImage({
-        base64Data,
-        filename: file.name,
-        folder: "test-uploads",
-        width: transformSettings.width,
-        height: transformSettings.height,
-      });
-
-      setUploadResult(result);
-      console.log("Upload success:", result);
-
-      // Auto-select the newly uploaded image for transformation
-      if (result.publicId) {
-        // Find the uploaded image in the images list to set as selected
-        const uploadedImage = images?.find(
-          (img) => img.publicId === result.publicId
+      if (isLarge) {
+        // Use direct upload for large files
+        setUploadMethod("direct");
+        console.log(
+          `Large file detected (${Math.round(file.size / (1024 * 1024))}MB), using direct upload...`
         );
-        if (uploadedImage) {
-          setSelectedImageForTransform(uploadedImage);
+
+        // Step 1: Get upload credentials
+        const credentials = await uploadImageDirect({
+          filename: file.name,
+          folder: "direct-uploads",
+          tags: ["direct", "large-file"],
+          width: transformSettings.width,
+          height: transformSettings.height,
+        });
+
+        // Step 2: Upload directly to Cloudinary with progress tracking
+        const uploadResult = await uploadDirectToCloudinary(
+          file,
+          credentials as UploadCredentials,
+          (progress) => {
+            setUploadProgress(progress);
+            console.log(`Upload progress: ${progress}%`);
+          }
+        );
+
+        // Step 3: Finalize upload and store metadata
+        const finalizeResult = await finalizeDirectUpload({
+          publicId: uploadResult.public_id,
+          uploadResult,
+          folder: "direct-uploads",
+        });
+
+        if (finalizeResult.success) {
+          setUploadResult({
+            success: true,
+            publicId: uploadResult.public_id,
+            secureUrl: uploadResult.secure_url,
+            method: "direct",
+          });
+        } else {
+          throw new Error(finalizeResult.error || "Failed to finalize upload");
         }
+      } else {
+        // Use base64 upload for small files
+        setUploadMethod("base64");
+        console.log(
+          `Small file detected (${Math.round(file.size / (1024 * 1024))}MB), using base64 upload...`
+        );
+
+        const base64Data = await fileToBase64(file);
+
+        const result = await uploadImage({
+          base64Data,
+          filename: file.name,
+          folder: "base64-uploads",
+          width: transformSettings.width,
+          height: transformSettings.height,
+        });
+
+        setUploadResult({
+          ...result,
+          method: "base64",
+        });
       }
+
+      console.log("Upload success:", uploadResult);
 
       // Reset file input
       if (fileInputRef.current) {
@@ -213,6 +279,9 @@ function App() {
       alert(`Upload failed: ${error}`);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
+      setUploadMethod(null);
+      setFileSize(null);
     }
   };
 
@@ -273,6 +342,26 @@ function App() {
 
       <section className="upload-section">
         <h2>📤 Upload Images</h2>
+        <div className="upload-info">
+          <p>
+            <strong>Upload Methods:</strong>
+          </p>
+          <ul>
+            <li>
+              🔸 <strong>Small files (&lt; 5MB):</strong> Base64 upload through
+              Convex
+            </li>
+            <li>
+              🔸 <strong>Large files (≥ 5MB):</strong> Direct upload to
+              Cloudinary
+            </li>
+          </ul>
+          <p>
+            <strong>Setup:</strong> Make sure to set CLOUDINARY_* environment
+            variables in Convex.
+          </p>
+        </div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -280,12 +369,115 @@ function App() {
           onChange={handleFileUpload}
           disabled={isUploading}
         />
-        {isUploading && <p className="loading">🔄 Uploading...</p>}
-        {uploadResult && (
-          <div className="success-message">
-            <p>✅ Upload Success! Public ID: {uploadResult.publicId}</p>
+
+        {fileSize && (
+          <div className="file-info">
+            <p>
+              <strong>File Size:</strong>{" "}
+              {Math.round((fileSize / (1024 * 1024)) * 100) / 100}MB
+            </p>
+            {uploadMethod && (
+              <p>
+                <strong>Upload Method:</strong>{" "}
+                {uploadMethod === "direct"
+                  ? "🚀 Direct Upload"
+                  : "📄 Base64 Upload"}
+              </p>
+            )}
           </div>
         )}
+
+        {isUploading && (
+          <div className="upload-status">
+            <p className="loading">🔄 Uploading...</p>
+            {uploadMethod === "direct" && uploadProgress > 0 && (
+              <div className="progress-container">
+                <div className="progress-bar">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+                <span className="progress-text">{uploadProgress}%</span>
+              </div>
+            )}
+            {uploadMethod === "base64" && (
+              <p className="upload-note">Processing base64 data...</p>
+            )}
+          </div>
+        )}
+
+        {uploadResult && (
+          <div className="success-message">
+            <p>✅ Upload Success!</p>
+            <p>
+              <strong>Public ID:</strong> {uploadResult.publicId}
+            </p>
+            <p>
+              <strong>Method Used:</strong>{" "}
+              {uploadResult.method === "direct"
+                ? "🚀 Direct Upload"
+                : "📄 Base64 Upload"}
+            </p>
+            {uploadResult.secureUrl && (
+              <p>
+                <strong>URL:</strong>{" "}
+                <a
+                  href={uploadResult.secureUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View Image
+                </a>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Testing Area */}
+        <div className="testing-area">
+          <h3>🧪 Test Upload Methods</h3>
+          <p>
+            Use the file input above to test automatic method selection, or use
+            these buttons to test specific methods:
+          </p>
+          <div className="test-buttons">
+            <button
+              className="test-button base64-test"
+              onClick={() => {
+                if (fileInputRef.current?.files?.[0]) {
+                  const file = fileInputRef.current.files[0];
+                  console.log(
+                    `Testing base64 upload with ${file.name} (${Math.round((file.size / (1024 * 1024)) * 100) / 100}MB)`
+                  );
+                  // You could force base64 upload here by modifying the handler
+                } else {
+                  alert("Please select a file first");
+                }
+              }}
+              disabled={isUploading}
+            >
+              🔧 Force Base64 Upload
+            </button>
+            <button
+              className="test-button direct-test"
+              onClick={() => {
+                if (fileInputRef.current?.files?.[0]) {
+                  const file = fileInputRef.current.files[0];
+                  console.log(
+                    `Testing direct upload with ${file.name} (${Math.round((file.size / (1024 * 1024)) * 100) / 100}MB)`
+                  );
+                  // You could force direct upload here by modifying the handler
+                } else {
+                  alert("Please select a file first");
+                }
+              }}
+              disabled={isUploading}
+            >
+              🚀 Force Direct Upload
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* Image Gallery */}

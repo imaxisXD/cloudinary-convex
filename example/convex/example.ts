@@ -66,7 +66,7 @@ const TransformationOptions = v.object({
   fetchFormat: v.optional(v.string()),
 });
 
-// Simple upload for testing - using the configured client
+// Simple base64 upload for small to medium files
 export const uploadImage = action({
   args: {
     base64Data: v.string(),
@@ -76,7 +76,7 @@ export const uploadImage = action({
     height: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // Use the configured cloudinary client
+    // Use regular base64 upload through Convex
     return await cloudinary.upload(ctx, args.base64Data, {
       filename: args.filename,
       folder: args.folder || "test-uploads",
@@ -94,14 +94,105 @@ export const uploadImage = action({
   },
 });
 
-// Upload with specific transformation - using the configured client
+// Direct upload for large files (client-side only)
+export const uploadImageDirect = action({
+  args: {
+    filename: v.optional(v.string()),
+    folder: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+  },
+  returns: v.object({
+    uploadUrl: v.string(),
+    uploadParams: v.object({
+      api_key: v.string(),
+      timestamp: v.string(),
+      signature: v.string(),
+      folder: v.optional(v.string()),
+      tags: v.optional(v.string()),
+      transformation: v.optional(v.string()),
+      public_id: v.optional(v.string()),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    // Generate upload credentials for direct upload
+    return await cloudinary.generateUploadCredentials(ctx, {
+      filename: args.filename,
+      folder: args.folder || "direct-uploads",
+      tags: args.tags || ["direct", "large-file"],
+      transformation:
+        args.width || args.height
+          ? {
+              width: args.width,
+              height: args.height,
+              crop: "fill",
+              quality: "auto",
+            }
+          : undefined,
+    });
+  },
+});
+
+// Finalize direct upload by storing metadata
+export const finalizeDirectUpload = action({
+  args: {
+    publicId: v.string(),
+    uploadResult: v.object({
+      public_id: v.string(),
+      secure_url: v.string(),
+      url: v.string(),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
+      format: v.string(),
+      bytes: v.optional(v.number()),
+      created_at: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      folder: v.optional(v.string()),
+      original_filename: v.optional(v.string()),
+    }),
+    userId: v.optional(v.string()),
+    folder: v.optional(v.string()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    assetId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      const assetId = await ctx.runMutation(
+        cloudinary.component.lib.finalizeUpload,
+        {
+          publicId: args.publicId,
+          uploadResult: args.uploadResult,
+          userId: args.userId,
+          folder: args.folder,
+        }
+      );
+
+      return {
+        success: true,
+        assetId: assetId,
+      };
+    } catch (error) {
+      console.error("Failed to finalize direct upload:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Finalization failed",
+      };
+    }
+  },
+});
+
+// Upload with specific transformation using base64 upload
 export const uploadImageWithTransform = action({
   args: {
     base64Data: v.string(),
     filename: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Use the configured cloudinary client
+    // Use base64 upload with transformation
     return await cloudinary.upload(ctx, args.base64Data, {
       filename: args.filename,
       folder: "examples",

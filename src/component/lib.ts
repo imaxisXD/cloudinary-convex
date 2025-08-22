@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel.js";
 import {
   mutation,
   query,
@@ -11,6 +12,7 @@ import {
   deleteFromCloudinary,
   generateTransformationUrl,
   validateCloudinaryConfig,
+  generateDirectUploadCredentials,
   type CloudinaryUploadOptions,
 } from "./apiUtils.js";
 
@@ -682,6 +684,138 @@ export const deleteAsset = action({
         success: false,
         error: error instanceof Error ? error.message : "Delete failed",
       };
+    }
+  },
+});
+
+// Generate signed upload credentials for direct client upload
+export const generateUploadCredentials = action({
+  args: {
+    filename: v.optional(v.string()),
+    folder: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    transformation: v.optional(TransformationType),
+    publicId: v.optional(v.string()),
+    userId: v.optional(v.string()),
+    config: v.object({
+      cloudName: v.string(),
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
+  },
+  returns: v.object({
+    uploadUrl: v.string(),
+    uploadParams: v.object({
+      api_key: v.string(),
+      timestamp: v.string(),
+      signature: v.string(),
+      folder: v.optional(v.string()),
+      tags: v.optional(v.string()),
+      transformation: v.optional(v.string()),
+      public_id: v.optional(v.string()),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      // Validate Cloudinary credentials
+      const config = validateConfig(args.config);
+      validateCloudinaryConfig(
+        config.cloudName,
+        config.apiKey,
+        config.apiSecret
+      );
+
+      // Validate upload options
+      const uploadOptions: Record<string, unknown> = {};
+      if (args.folder) uploadOptions.folder = args.folder;
+      if (args.tags) uploadOptions.tags = args.tags;
+      if (args.publicId) uploadOptions.publicId = args.publicId;
+      validateUploadOptions(uploadOptions);
+
+      if (args.transformation) {
+        validateTransformation(args.transformation);
+      }
+
+      // Generate direct upload credentials
+      const credentials = await generateDirectUploadCredentials(
+        config.cloudName,
+        config.apiKey,
+        config.apiSecret,
+        {
+          folder: args.folder,
+          tags: args.tags,
+          transformation: args.transformation,
+          publicId: args.publicId,
+        }
+      );
+
+      return {
+        uploadUrl: credentials.uploadUrl,
+        uploadParams: credentials.uploadParams,
+      };
+    } catch (error) {
+      console.error("Failed to generate upload credentials:", error);
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate upload credentials"
+      );
+    }
+  },
+});
+
+// Finalize upload by storing metadata after successful direct upload
+export const finalizeUpload = mutation({
+  args: {
+    publicId: v.string(),
+    uploadResult: v.object({
+      public_id: v.string(),
+      secure_url: v.string(),
+      url: v.string(),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
+      format: v.string(),
+      bytes: v.optional(v.number()),
+      created_at: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      folder: v.optional(v.string()),
+      original_filename: v.optional(v.string()),
+    }),
+    userId: v.optional(v.string()),
+    folder: v.optional(v.string()),
+  },
+  returns: v.id("assets"),
+  handler: async (ctx, args): Promise<Id<"assets">> => {
+    try {
+      // Validate that the upload was successful and data is consistent
+      if (args.uploadResult.public_id !== args.publicId) {
+        throw new Error("Public ID mismatch between request and upload result");
+      }
+
+      // Store the upload metadata in database
+      const assetId: Id<"assets"> = await ctx.runMutation(
+        internal.lib.storeAsset,
+        {
+          publicId: args.uploadResult.public_id,
+          cloudinaryUrl: args.uploadResult.url,
+          secureUrl: args.uploadResult.secure_url,
+          originalFilename: args.uploadResult.original_filename,
+          format: args.uploadResult.format,
+          width: args.uploadResult.width,
+          height: args.uploadResult.height,
+          bytes: args.uploadResult.bytes,
+          tags: args.uploadResult.tags,
+          folder: args.uploadResult.folder || args.folder,
+          userId: args.userId,
+        }
+      );
+
+      return assetId;
+    } catch (error) {
+      console.error("Failed to finalize upload:", error);
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to finalize upload"
+      );
     }
   },
 });
