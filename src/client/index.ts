@@ -37,10 +37,10 @@ export interface CloudinaryAsset {
   width?: number;
   height?: number;
   bytes?: number;
-  transformations?: any[];
+  transformations?: CloudinaryTransformation[];
   tags?: string[];
   folder?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   uploadedAt: number;
   updatedAt: number;
   userId?: string;
@@ -87,7 +87,34 @@ export class CloudinaryClient {
   }
 
   /**
-   * Upload a file to Cloudinary using direct API calls
+   * Upload a file to Cloudinary using base64 data through Convex.
+   *
+   * **When to use:**
+   * - Small to medium files (under ~10MB recommended)
+   * - Server-side uploads where you already have base64 data
+   * - Simple use cases where progress tracking isn't needed
+   *
+   * **Limitations:**
+   * - Subject to Convex's 16MB argument size limit
+   * - Base64 encoding adds ~33% overhead, so effective max is ~10-12MB
+   * - No real-time progress tracking
+   *
+   * **For large files**, use {@link uploadDirect} instead, which bypasses
+   * Convex for the file transfer and uploads directly to Cloudinary.
+   *
+   * @param ctx - The Convex action context
+   * @param base64Data - Base64-encoded file data (data URL format: "data:image/png;base64,...")
+   * @param options - Optional upload configuration
+   * @returns Upload result with publicId, secureUrl, dimensions, etc.
+   *
+   * @example
+   * ```ts
+   * // In a Convex action
+   * const result = await cloudinary.upload(ctx, base64Data, {
+   *   folder: "uploads",
+   *   tags: ["profile-picture"],
+   * });
+   * ```
    */
   async upload(ctx: RunActionCtx, base64Data: string, options?: UploadOptions) {
     // Transform the options to match backend expectations
@@ -173,7 +200,7 @@ export class CloudinaryClient {
   async updateAsset(
     ctx: RunMutationCtx,
     publicId: string,
-    updates: { tags?: string[]; metadata?: any }
+    updates: { tags?: string[]; metadata?: Record<string, unknown> }
   ) {
     return ctx.runMutation(this.component.lib.updateAsset, {
       publicId,
@@ -182,7 +209,43 @@ export class CloudinaryClient {
   }
 
   /**
-   * Generate upload credentials for direct client-side upload
+   * Generate signed upload credentials for direct browser-to-Cloudinary uploads.
+   *
+   * This is the first step in a two-part direct upload flow:
+   * 1. Call this method to get signed credentials (server-side, secure)
+   * 2. Upload directly to Cloudinary from the browser using credentials
+   * 3. Call `finalizeUpload` to store metadata in Convex
+   *
+   * **When to use:**
+   * - Building custom upload UI with progress tracking
+   * - Need full control over the upload process
+   * - Want to implement chunked uploads
+   *
+   * **For most use cases**, prefer {@link uploadDirect} which handles all
+   * three steps automatically.
+   *
+   * @param ctx - The Convex action context
+   * @param options - Upload options (folder, tags, transformation, etc.)
+   * @returns Signed credentials with uploadUrl and uploadParams
+   *
+   * @example
+   * ```ts
+   * // Step 1: Get credentials (in Convex action)
+   * const credentials = await cloudinary.generateUploadCredentials(ctx, {
+   *   folder: "uploads",
+   * });
+   *
+   * // Step 2: Upload from browser (client-side)
+   * const formData = new FormData();
+   * formData.append("file", file);
+   * Object.entries(credentials.uploadParams).forEach(([k, v]) => {
+   *   formData.append(k, v);
+   * });
+   * const response = await fetch(credentials.uploadUrl, {
+   *   method: "POST",
+   *   body: formData,
+   * });
+   * ```
    */
   async generateUploadCredentials(
     ctx: RunActionCtx,
@@ -218,8 +281,44 @@ export class CloudinaryClient {
   }
 
   /**
-   * Upload a file directly to Cloudinary (bypassing Convex for the file transfer)
-   * This is ideal for large files as it avoids the 16MB Convex argument limit
+   * Upload a file directly to Cloudinary, bypassing Convex for the file transfer.
+   *
+   * This method avoids Convex's 16MB argument size limit by uploading directly
+   * from the browser to Cloudinary using signed credentials.
+   *
+   * **When to use:**
+   * - Large files (over 10MB)
+   * - Need real-time upload progress tracking
+   * - Any file size when progress feedback is important
+   *
+   * **How it works:**
+   * 1. Gets signed upload credentials from Convex (secure, server-side)
+   * 2. Uploads file directly from browser to Cloudinary
+   * 3. Stores metadata in Convex database
+   *
+   * **Note:** This method requires a browser environment with File API support.
+   * It will not work in Node.js or Convex server environments.
+   *
+   * @param ctx - The Convex action context
+   * @param file - File object to upload (from input element or drag-drop)
+   * @param options - Upload options including progress callback and validation
+   * @returns Cloudinary upload response with public_id, secure_url, etc.
+   *
+   * @example
+   * ```ts
+   * // In a React component
+   * const handleUpload = async (file: File) => {
+   *   const result = await cloudinary.uploadDirect(ctx, file, {
+   *     folder: "uploads",
+   *     onProgress: (progress) => setUploadProgress(progress),
+   *     validation: { maxSize: 50 * 1024 * 1024 }, // 50MB max
+   *   });
+   *   console.log("Uploaded:", result.secure_url);
+   * };
+   * ```
+   *
+   * @see {@link upload} for base64 uploads (smaller files, server-compatible)
+   * @see {@link isLargeFile} to check if a file should use direct upload
    */
   async uploadDirect(
     ctx: RunActionCtx,
@@ -271,8 +370,38 @@ export class CloudinaryClient {
   }
 
   /**
-   * Helper method to convert File to base64 string
-   * Only works in browser environments with FileReader support
+   * Convert a File object to a base64 data URL string.
+   *
+   * **When to use:**
+   * - You need base64 data for the {@link upload} method
+   * - Converting files for preview before upload
+   * - Small to medium files only (under ~10MB recommended)
+   *
+   * **Note:** This method only works in browser environments with FileReader
+   * support. For server-side uploads, you should already have the file data
+   * in a suitable format.
+   *
+   * **For large files**, use {@link uploadDirect} instead, which doesn't
+   * require base64 conversion.
+   *
+   * @param file - File object to convert
+   * @returns Base64 data URL string (e.g., "data:image/png;base64,...")
+   * @throws Error if called outside a browser environment
+   *
+   * @example
+   * ```ts
+   * const file = inputElement.files[0];
+   *
+   * // Check file size first
+   * if (CloudinaryClient.isLargeFile(file)) {
+   *   // Use direct upload for large files
+   *   await cloudinary.uploadDirect(ctx, file, options);
+   * } else {
+   *   // Convert to base64 for small files
+   *   const base64 = await CloudinaryClient.fileToBase64(file);
+   *   await cloudinary.upload(ctx, base64, options);
+   * }
+   * ```
    */
   static async fileToBase64(file: File): Promise<string> {
     if (typeof FileReader === "undefined") {
@@ -291,14 +420,61 @@ export class CloudinaryClient {
   }
 
   /**
-   * Check if a file is considered large and should use direct upload
+   * Check if a file should use direct upload based on its size.
+   *
+   * Files larger than the threshold should use {@link uploadDirect} to avoid
+   * Convex's 16MB argument size limit. The default threshold is 10MB, which
+   * accounts for base64 encoding overhead (~33%).
+   *
+   * @param file - File object to check
+   * @param threshold - Size threshold in bytes (default: 10MB = 10 * 1024 * 1024)
+   * @returns true if file size exceeds the threshold
+   *
+   * @example
+   * ```ts
+   * const file = inputElement.files[0];
+   *
+   * if (CloudinaryClient.isLargeFile(file)) {
+   *   // Use direct upload for large files
+   *   await cloudinary.uploadDirect(ctx, file, options);
+   * } else {
+   *   // Use base64 upload for small files
+   *   const base64 = await CloudinaryClient.fileToBase64(file);
+   *   await cloudinary.upload(ctx, base64, options);
+   * }
+   *
+   * // Custom threshold (5MB)
+   * if (CloudinaryClient.isLargeFile(file, 5 * 1024 * 1024)) {
+   *   // ...
+   * }
+   * ```
    */
   static isLargeFile(file: File, threshold?: number): boolean {
     return isLargeFile(file, threshold);
   }
 
   /**
-   * Validate a file before upload
+   * Validate a file before upload based on size and type constraints.
+   *
+   * @param file - File object to validate
+   * @param options - Validation options
+   * @param options.maxSize - Maximum file size in bytes (default: 100MB)
+   * @param options.allowedTypes - Array of allowed MIME types (default: common image types)
+   * @throws Error if file fails validation
+   *
+   * @example
+   * ```ts
+   * try {
+   *   await CloudinaryClient.validateFile(file, {
+   *     maxSize: 50 * 1024 * 1024, // 50MB
+   *     allowedTypes: ["image/jpeg", "image/png", "image/webp"],
+   *   });
+   *   // File is valid, proceed with upload
+   * } catch (error) {
+   *   // Show validation error to user
+   *   console.error("Invalid file:", error.message);
+   * }
+   * ```
    */
   static async validateFile(
     file: File,

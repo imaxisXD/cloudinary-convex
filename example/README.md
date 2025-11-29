@@ -93,6 +93,18 @@ The example app automatically chooses the upload method based on file size:
    - Upload goes directly to Cloudinary
    - Progress bar shows real-time upload progress
 
+### ⚠️ Cloudinary Plan Limits
+
+Be aware of your Cloudinary plan's file size limits when testing:
+
+| Plan         | Max Image | Max Video |
+| ------------ | --------- | --------- |
+| **Free**     | 10 MB     | 100 MB    |
+| **Plus**     | 20 MB     | 2 GB      |
+| **Advanced** | 40 MB     | 4 GB      |
+
+> **Tip:** If uploads fail for large files, check that the file doesn't exceed your plan's limits. See [Cloudinary Pricing](https://cloudinary.com/pricing/compare-plans) for details.
+
 ### What You'll See
 
 - **File size detection** in the UI

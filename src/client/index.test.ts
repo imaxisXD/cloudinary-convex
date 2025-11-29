@@ -21,13 +21,20 @@ import { components, initConvexTest } from "./setup.test.js";
 const schema = defineSchema({});
 type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 const query = queryGeneric as QueryBuilder<DataModel, "public">;
-const mutation = mutationGeneric as MutationBuilder<DataModel, "public">;
+const _mutation = mutationGeneric as MutationBuilder<DataModel, "public">;
 const action = actionGeneric as ActionBuilder<DataModel, "public">;
 
-const cloudinaryClient = new CloudinaryClient(components.cloudinary, {});
+// Mock Cloudinary config for tests
+const mockConfig = {
+  cloudName: "test-cloud",
+  apiKey: "123456789012345",
+  apiSecret: "test-secret-key-123456789",
+};
 
-// Mock base64 image data
-const mockImageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const cloudinaryClient = new CloudinaryClient(components.cloudinary, mockConfig);
+
+// Mock base64 image data (prefixed with _ as it's kept for future test expansion)
+const _mockImageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 export const testTransformQuery = query({
   args: { publicId: v.string() },
@@ -57,7 +64,7 @@ export const testUploadAction = action({
   },
 });
 
-const testApi: ApiFromModules<{
+const _testApi: ApiFromModules<{
   fns: {
     testTransformQuery: typeof testTransformQuery;
     testListQuery: typeof testListQuery;
@@ -75,7 +82,7 @@ describe("CloudinaryClient", () => {
   });
 
   test("should create CloudinaryClient instance", () => {
-    const client = new CloudinaryClient(components.cloudinary);
+    const client = new CloudinaryClient(components.cloudinary, mockConfig);
     expect(client).toBeDefined();
     expect(client.component).toBeDefined();
   });
@@ -113,7 +120,7 @@ describe("CloudinaryClient", () => {
   });
 
   test("should provide API methods", () => {
-    const client = new CloudinaryClient(components.cloudinary);
+    const client = new CloudinaryClient(components.cloudinary, mockConfig);
     const api = client.api();
     
     expect(api.upload).toBeDefined();

@@ -2,6 +2,13 @@ import { v } from "convex/values";
 import { action, query } from "./_generated/server";
 import { components } from "./_generated/api";
 import { CloudinaryClient } from "../../src/client/index.js";
+// Import shared validators from the component for consistent type definitions
+// Use vAssetResponse for external consumers (IDs are serialized as strings across component boundaries)
+// Use vCloudinaryUploadResponse for direct upload result validation
+import {
+  vAssetResponse,
+  vCloudinaryUploadResponse,
+} from "../../src/component/lib.js";
 
 // Validate environment variables
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
@@ -138,19 +145,8 @@ export const uploadImageDirect = action({
 export const finalizeDirectUpload = action({
   args: {
     publicId: v.string(),
-    uploadResult: v.object({
-      public_id: v.string(),
-      secure_url: v.string(),
-      url: v.string(),
-      width: v.optional(v.number()),
-      height: v.optional(v.number()),
-      format: v.string(),
-      bytes: v.optional(v.number()),
-      created_at: v.optional(v.string()),
-      tags: v.optional(v.array(v.string())),
-      folder: v.optional(v.string()),
-      original_filename: v.optional(v.string()),
-    }),
+    // Use the shared validator for Cloudinary upload responses
+    uploadResult: vCloudinaryUploadResponse,
     userId: v.optional(v.string()),
     folder: v.optional(v.string()),
   },
@@ -222,27 +218,8 @@ export const deleteImage = action({
 // List all images (simple version for testing) - using the configured client
 export const listImages = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.string(),
-      _creationTime: v.number(),
-      publicId: v.string(),
-      cloudinaryUrl: v.string(),
-      secureUrl: v.string(),
-      originalFilename: v.optional(v.string()),
-      format: v.string(),
-      width: v.optional(v.number()),
-      height: v.optional(v.number()),
-      bytes: v.optional(v.number()),
-      transformations: v.optional(v.array(v.any())),
-      tags: v.optional(v.array(v.string())),
-      folder: v.optional(v.string()),
-      metadata: v.optional(v.any()),
-      uploadedAt: v.number(),
-      updatedAt: v.number(),
-      userId: v.optional(v.string()),
-    })
-  ),
+  // Using shared vAssetResponse validator from component for consistent type definitions
+  returns: v.array(vAssetResponse),
   handler: async (ctx, _args) => {
     // Use the configured cloudinary client
     return await cloudinary.list(ctx, {
@@ -258,27 +235,8 @@ export const listImagesWithFilters = query({
     folder: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  returns: v.array(
-    v.object({
-      _id: v.string(),
-      _creationTime: v.number(),
-      publicId: v.string(),
-      cloudinaryUrl: v.string(),
-      secureUrl: v.string(),
-      originalFilename: v.optional(v.string()),
-      format: v.string(),
-      width: v.optional(v.number()),
-      height: v.optional(v.number()),
-      bytes: v.optional(v.number()),
-      transformations: v.optional(v.array(v.any())),
-      tags: v.optional(v.array(v.string())),
-      folder: v.optional(v.string()),
-      metadata: v.optional(v.any()),
-      uploadedAt: v.number(),
-      updatedAt: v.number(),
-      userId: v.optional(v.string()),
-    })
-  ),
+  // Using shared vAssetResponse validator from component for consistent type definitions
+  returns: v.array(vAssetResponse),
   handler: async (ctx, args) => {
     // Use the configured cloudinary client
     return await cloudinary.list(ctx, {

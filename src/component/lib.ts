@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import type { Id } from "./_generated/dataModel.js";
 import {
   mutation,
@@ -16,8 +16,17 @@ import {
   type CloudinaryUploadOptions,
 } from "./apiUtils.js";
 
-// Types for better type safety
-const TransformationType = v.object({
+// ============================================================================
+// VALIDATORS
+// Following Convex convention: "vValidatorName" or "ValidatorNameValidator"
+// Types are derived using Infer<> for type safety
+// ============================================================================
+
+/**
+ * Validator for Cloudinary transformation options.
+ * Use this for specifying image transformations like resize, crop, effects, etc.
+ */
+export const vTransformation = v.object({
   width: v.optional(v.number()),
   height: v.optional(v.number()),
   crop: v.optional(v.string()),
@@ -29,7 +38,15 @@ const TransformationType = v.object({
   effect: v.optional(v.string()),
 });
 
-const AssetType = v.object({
+/** TypeScript type for Cloudinary transformations, derived from vTransformation validator */
+export type Transformation = Infer<typeof vTransformation>;
+
+/**
+ * Validator for a Cloudinary asset stored in the database (internal use).
+ * Includes all fields returned when querying assets.
+ * Use this within the component where Id<"assets"> is valid.
+ */
+export const vAsset = v.object({
   _id: v.id("assets"),
   _creationTime: v.number(),
   publicId: v.string(),
@@ -48,6 +65,74 @@ const AssetType = v.object({
   updatedAt: v.number(),
   userId: v.optional(v.string()),
 });
+
+/** TypeScript type for a Cloudinary asset, derived from vAsset validator */
+export type Asset = Infer<typeof vAsset>;
+
+/**
+ * Validator for a Cloudinary asset returned to external consumers.
+ * When crossing component boundaries, IDs are serialized as strings.
+ * Use this in your app's Convex functions when calling the component.
+ */
+export const vAssetResponse = v.object({
+  _id: v.string(),
+  _creationTime: v.number(),
+  publicId: v.string(),
+  cloudinaryUrl: v.string(),
+  secureUrl: v.string(),
+  originalFilename: v.optional(v.string()),
+  format: v.string(),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  bytes: v.optional(v.number()),
+  transformations: v.optional(v.array(v.any())),
+  tags: v.optional(v.array(v.string())),
+  folder: v.optional(v.string()),
+  metadata: v.optional(v.any()),
+  uploadedAt: v.number(),
+  updatedAt: v.number(),
+  userId: v.optional(v.string()),
+});
+
+/** TypeScript type for asset responses, derived from vAssetResponse validator */
+export type AssetResponse = Infer<typeof vAssetResponse>;
+
+/**
+ * Validator for the raw Cloudinary upload API response.
+ * Use this when handling direct upload responses from Cloudinary.
+ * Includes all fields that Cloudinary may return.
+ */
+export const vCloudinaryUploadResponse = v.object({
+  // Required fields
+  public_id: v.string(),
+  secure_url: v.string(),
+  url: v.string(),
+  format: v.string(),
+  // Optional dimension/size fields
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  bytes: v.optional(v.number()),
+  // Optional metadata fields
+  created_at: v.optional(v.string()),
+  tags: v.optional(v.array(v.string())),
+  folder: v.optional(v.string()),
+  original_filename: v.optional(v.string()),
+  // Additional fields returned by Cloudinary API
+  access_mode: v.optional(v.string()),
+  api_key: v.optional(v.string()),
+  asset_id: v.optional(v.string()),
+  etag: v.optional(v.string()),
+  existing: v.optional(v.boolean()),
+  placeholder: v.optional(v.boolean()),
+  resource_type: v.optional(v.string()),
+  signature: v.optional(v.string()),
+  type: v.optional(v.string()),
+  version: v.optional(v.number()),
+  version_id: v.optional(v.string()),
+});
+
+/** TypeScript type for Cloudinary upload response */
+export type CloudinaryUploadResult = Infer<typeof vCloudinaryUploadResponse>;
 
 // File validation constants
 const SUPPORTED_IMAGE_TYPES = [
@@ -364,7 +449,7 @@ export const storeAsset = internalMutation({
 export const transform = query({
   args: {
     publicId: v.string(),
-    transformation: TransformationType,
+    transformation: vTransformation,
     config: v.object({
       cloudName: v.string(),
       apiKey: v.string(),
@@ -435,7 +520,7 @@ export const listAssets = query({
       apiSecret: v.string(),
     }),
   },
-  returns: v.array(AssetType),
+  returns: v.array(vAsset),
   handler: async (ctx, args) => {
     // Apply filters and get assets
     let assets;
@@ -483,7 +568,7 @@ export const getAsset = query({
       apiSecret: v.string(),
     }),
   },
-  returns: v.union(AssetType, v.null()),
+  returns: v.union(vAsset, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
       .query("assets")
@@ -499,7 +584,7 @@ export const updateAsset = mutation({
     tags: v.optional(v.array(v.string())),
     metadata: v.optional(v.any()),
   },
-  returns: v.union(AssetType, v.null()),
+  returns: v.union(vAsset, v.null()),
   handler: async (ctx, args) => {
     const asset = await ctx.db
       .query("assets")
@@ -530,14 +615,26 @@ export const updateAsset = mutation({
   },
 });
 
-// Upload action using direct Cloudinary API
+/**
+ * Upload a file to Cloudinary using base64 data.
+ *
+ * **Important:** This method has a 16MB argument size limit from Convex.
+ * Since base64 encoding adds ~33% overhead, the practical limit is ~10-12MB.
+ *
+ * For larger files, use the two-part direct upload flow:
+ * 1. `generateUploadCredentials` - get signed credentials
+ * 2. Upload directly from browser to Cloudinary
+ * 3. `finalizeUpload` - store metadata in database
+ *
+ * @see generateUploadCredentials for large file uploads
+ */
 export const upload = action({
   args: {
     base64Data: v.string(),
     filename: v.optional(v.string()),
     folder: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
-    transformation: v.optional(TransformationType),
+    transformation: v.optional(vTransformation),
     publicId: v.optional(v.string()),
     userId: v.optional(v.string()),
     config: v.object({
@@ -688,13 +785,27 @@ export const deleteAsset = action({
   },
 });
 
-// Generate signed upload credentials for direct client upload
+/**
+ * Generate signed upload credentials for direct browser-to-Cloudinary uploads.
+ *
+ * This enables uploading large files (beyond Convex's 16MB limit) by:
+ * 1. Generating secure, time-limited upload credentials server-side
+ * 2. Client uploads directly to Cloudinary with these credentials
+ * 3. Call `finalizeUpload` to store the asset metadata in Convex
+ *
+ * **Benefits:**
+ * - No file size limit from Convex (Cloudinary limits apply)
+ * - Real-time progress tracking in the browser
+ * - Reduced server load and faster uploads
+ *
+ * @see finalizeUpload - call after successful direct upload to store metadata
+ */
 export const generateUploadCredentials = action({
   args: {
     filename: v.optional(v.string()),
     folder: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
-    transformation: v.optional(TransformationType),
+    transformation: v.optional(vTransformation),
     publicId: v.optional(v.string()),
     userId: v.optional(v.string()),
     config: v.object({
@@ -764,23 +875,24 @@ export const generateUploadCredentials = action({
   },
 });
 
-// Finalize upload by storing metadata after successful direct upload
+/**
+ * Finalize a direct upload by storing the asset metadata in the database.
+ *
+ * Call this after a successful direct upload to Cloudinary to:
+ * - Store the asset metadata in Convex for querying
+ * - Enable the asset to appear in `listAssets` and `getAsset` queries
+ *
+ * **Direct upload flow:**
+ * 1. `generateUploadCredentials` - get signed credentials
+ * 2. Upload file directly to Cloudinary from browser
+ * 3. `finalizeUpload` - store metadata (this function)
+ *
+ * @param uploadResult - The response from Cloudinary's upload API
+ */
 export const finalizeUpload = mutation({
   args: {
     publicId: v.string(),
-    uploadResult: v.object({
-      public_id: v.string(),
-      secure_url: v.string(),
-      url: v.string(),
-      width: v.optional(v.number()),
-      height: v.optional(v.number()),
-      format: v.string(),
-      bytes: v.optional(v.number()),
-      created_at: v.optional(v.string()),
-      tags: v.optional(v.array(v.string())),
-      folder: v.optional(v.string()),
-      original_filename: v.optional(v.string()),
-    }),
+    uploadResult: vCloudinaryUploadResponse,
     userId: v.optional(v.string()),
     folder: v.optional(v.string()),
   },

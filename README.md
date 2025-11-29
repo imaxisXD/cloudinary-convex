@@ -8,35 +8,76 @@ A comprehensive Cloudinary integration component for Convex that provides image 
 
 ## Features
 
-✨ **Smart Upload**: Automatic choice between base64 and direct upload based on file size  
-🚀 **Large File Support**: Direct uploads with signed URLs for files up to 100MB  
-📈 **Progress Tracking**: Real-time upload progress with chunk-based uploads  
-🔄 **Fallback Strategy**: Automatic fallback to base64 for edge cases  
-🎨 **Dynamic Transformations**: Generate transformed URLs for existing images  
-🗃️ **Asset Management**: Track and manage all uploaded assets in your Convex database  
-🛡️ **Type Safety**: Full TypeScript support with comprehensive type definitions  
-🔒 **Secure**: Environment-based credential management  
-📊 **Database Integration**: Automatic asset tracking with optimized indexes  
-🚀 **Client Wrapper**: Optional CloudinaryClient for simplified usage
+- **Two Upload Methods**: Base64 upload for small files, direct upload for large files (bypasses 16MB limit)
+- **Large File Support**: Direct browser-to-Cloudinary uploads with signed URLs for files up to 100MB+
+- **Progress Tracking**: Real-time upload progress for direct uploads
+- **Dynamic Transformations**: Generate transformed URLs on-the-fly
+- **Asset Management**: Track and manage all uploaded assets in your Convex database
+- **Type Safety**: Full TypeScript support with exported validators and inferred types
+- **Secure**: Server-side signature generation, environment-based credentials
+- **Database Integration**: Automatic asset tracking with optimized indexes
+- **Reusable Validators**: Export validators like `vAssetResponse` for consistent typing
 
-Why use this component?
+**Why use this component?**
 
 - **Direct API Integration**: Uses Cloudinary REST APIs directly instead of SDKs for better control and reduced dependencies
+- **Bypasses Convex Limits**: Direct upload flow avoids the 16MB argument size limit for large files
 - **Seamless Integration**: Native Convex integration with real-time database updates
 - **Production Ready**: Built-in error handling, validation, and secure signature generation
-- **Developer Experience**: Rich TypeScript types and intuitive API
-- **Performance**: Optimized image delivery through Cloudinary's global CDN
-- **Flexible Usage**: Use directly or with the convenient CloudinaryClient wrapper
+- **Developer Experience**: Rich TypeScript types with `Infer<>` derived types
 
 Found a bug? Feature request? [File it here](https://github.com/imaxisXD/cloudinary-convex/issues).
 
-## Pre-requisite: Convex
+## Architecture
 
-You'll need an existing Convex project to use the component.
-Convex is a hosted backend platform, including a database, serverless functions,
-and a ton more you can learn about [here](https://docs.convex.dev/get-started).
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Your Convex App                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐     ┌──────────────────────────────────────────────┐  │
+│  │  Your Actions/  │     │         Cloudinary Component                  │  │
+│  │    Queries      │────▶│  ┌────────────────────────────────────────┐  │  │
+│  └─────────────────┘     │  │              lib.ts                     │  │  │
+│          │               │  │  • upload (base64, <10MB)               │  │  │
+│          │               │  │  • generateUploadCredentials            │  │  │
+│          ▼               │  │  • finalizeUpload                       │  │  │
+│  ┌─────────────────┐     │  │  • transform, delete, list, get         │  │  │
+│  │ CloudinaryClient│     │  └────────────────────────────────────────┘  │  │
+│  │   (optional)    │     │                     │                        │  │
+│  └─────────────────┘     │                     ▼                        │  │
+│                          │  ┌────────────────────────────────────────┐  │  │
+│                          │  │           assets table                  │  │  │
+│                          │  │  Indexes: by_publicId, by_userId,      │  │  │
+│                          │  │           by_folder, by_uploadedAt     │  │  │
+│                          │  └────────────────────────────────────────┘  │  │
+│                          └──────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+                         ┌──────────────────────────┐
+                         │     Cloudinary API       │
+                         │  • Upload API            │
+                         │  • Admin API             │
+                         │  • Transformation URLs   │
+                         └──────────────────────────┘
+```
 
-Run `npm create convex` or follow any of the [quickstarts](https://docs.convex.dev/home) to set one up.
+### Upload Flow Options
+
+**Option A: Base64 Upload (Small Files < 10MB)**
+
+```
+Browser → Convex Action → Cloudinary API → Store metadata in DB
+```
+
+**Option B: Direct Upload (Large Files > 10MB)**
+
+```
+1. Browser → Convex Action → Generate signed credentials
+2. Browser → Cloudinary API (direct upload with progress)
+3. Browser → Convex Mutation → Store metadata in DB
+```
 
 ## Prerequisites
 
@@ -44,8 +85,6 @@ Run `npm create convex` or follow any of the [quickstarts](https://docs.convex.d
 2. **Cloudinary Account**: Free account at [cloudinary.com](https://cloudinary.com)
 
 ## Installation
-
-Install the component package:
 
 ```bash
 npm install cloudinary-component
@@ -70,7 +109,7 @@ export default app;
 
 ### 2. Set Environment Variables
 
-Get your Cloudinary credentials from the [Cloudinary Console](https://cloudinary.com/console) and set them in your Convex deployment:
+Get your Cloudinary credentials from the [Cloudinary Console](https://cloudinary.com/console):
 
 ```bash
 npx convex env set CLOUDINARY_CLOUD_NAME your_cloud_name_here
@@ -80,15 +119,15 @@ npx convex env set CLOUDINARY_API_SECRET your_api_secret_here
 
 ## Quick Start
 
-### Option 1: Using CloudinaryClient (Recommended)
-
-The easiest way to use the component is with the CloudinaryClient wrapper, similar to how Resend works:
+### Using CloudinaryClient (Recommended)
 
 ```ts
 // convex/images.ts
 import { action, query } from "./_generated/server";
 import { components } from "./_generated/api";
 import { CloudinaryClient } from "cloudinary-component";
+// Import the shared validator for consistent return types
+import { vAssetResponse } from "cloudinary-component/lib";
 import { v } from "convex/values";
 
 // Validate environment variables
@@ -107,55 +146,27 @@ const cloudinary = new CloudinaryClient(components.cloudinary, {
   apiSecret,
 });
 
+// Upload an image (base64 - for files under ~10MB)
 export const uploadImage = action({
   args: {
     base64Data: v.string(),
     filename: v.optional(v.string()),
     folder: v.optional(v.string()),
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     return await cloudinary.upload(ctx, args.base64Data, {
       filename: args.filename,
       folder: args.folder || "uploads",
       tags: ["user-content"],
-      transformation:
-        args.width || args.height
-          ? {
-              width: args.width || 400,
-              height: args.height || 400,
-              crop: "fill",
-              quality: "auto",
-            }
-          : undefined,
     });
   },
 });
 
+// List images using the shared validator
 export const getImages = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.string(),
-      _creationTime: v.number(),
-      publicId: v.string(),
-      cloudinaryUrl: v.string(),
-      secureUrl: v.string(),
-      originalFilename: v.optional(v.string()),
-      format: v.string(),
-      width: v.optional(v.number()),
-      height: v.optional(v.number()),
-      bytes: v.optional(v.number()),
-      transformations: v.optional(v.array(v.any())),
-      tags: v.optional(v.array(v.string())),
-      folder: v.optional(v.string()),
-      metadata: v.optional(v.any()),
-      uploadedAt: v.number(),
-      updatedAt: v.number(),
-      userId: v.optional(v.string()),
-    })
-  ),
+  // Use the exported validator instead of inline definition
+  returns: v.array(vAssetResponse),
   handler: async (ctx) => {
     return await cloudinary.list(ctx, {
       limit: 20,
@@ -165,13 +176,13 @@ export const getImages = query({
 });
 ```
 
-### Option 2: Direct Component Usage
+### Direct Component Usage
 
-You can also use the component functions directly:
+You can also use component functions directly without the client wrapper:
 
 ```ts
 // convex/images.ts
-import { action, query } from "./_generated/server";
+import { action } from "./_generated/server";
 import { components } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -191,379 +202,213 @@ export const uploadImage = action({
       base64Data: args.base64Data,
       filename: args.filename,
       folder: "uploads",
-      tags: ["user-content"],
       config,
     });
   },
 });
 ```
 
-## Smart Upload Features
+## Handling Large Files (Direct Upload)
 
-### Understanding Smart Upload
+Convex has a 16MB argument size limit. Since base64 encoding adds ~33% overhead, the practical limit for `upload()` is ~10-12MB. For larger files, use the direct upload flow.
 
-The component automatically chooses the best upload method based on file size and type:
+### Direct Upload Flow
 
-- **Small files (<= 5MB)**: Uses base64 upload for simplicity and speed
-- **Large files (> 5MB)**: Uses direct upload with signed URLs for better performance
-- **Auto-fallback**: Falls back to base64 if direct upload fails
-- **Progress tracking**: Real-time progress updates for large files
-- **Chunked uploads**: For very large files (configurable chunk size)
-
-### `uploadSmart(ctx, file, options?)` - Recommended
-
-The smart upload method that automatically handles file size optimization:
+The direct upload bypasses Convex for the file transfer, uploading directly from the browser to Cloudinary:
 
 ```ts
-export const uploadSmartImage = action({
+// convex/images.ts - Backend
+export const getUploadCredentials = action({
   args: {
-    fileData: v.union(v.string(), v.bytes()),
-    filename: v.string(),
-    fileSize: v.number(),
-    mimeType: v.string(),
+    filename: v.optional(v.string()),
     folder: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await cloudinary.uploadSmart(ctx, {
-      data: args.fileData,
+    return await cloudinary.generateUploadCredentials(ctx, {
       filename: args.filename,
-      size: args.fileSize,
-      type: args.mimeType,
-    }, {
-      folder: args.folder || "smart-uploads",
-      tags: ["smart-upload"],
-      onProgress: (progress) => {
-        console.log(`Upload progress: ${progress.loaded}/${progress.total} bytes`);
-      },
+      folder: args.folder || "large-uploads",
     });
   },
 });
-```
 
-### `uploadDirect(ctx, file, options?)` - For Large Files
-
-Direct upload method using signed URLs for large files:
-
-```ts
-export const uploadLargeImage = action({
+export const finalizeUpload = action({
   args: {
-    fileData: v.bytes(),
-    filename: v.string(),
-    fileSize: v.number(),
-    mimeType: v.string(),
+    publicId: v.string(),
+    uploadResult: v.object({
+      public_id: v.string(),
+      secure_url: v.string(),
+      url: v.string(),
+      width: v.optional(v.number()),
+      height: v.optional(v.number()),
+      format: v.string(),
+      bytes: v.optional(v.number()),
+      created_at: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      folder: v.optional(v.string()),
+      original_filename: v.optional(v.string()),
+    }),
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    return await cloudinary.uploadDirect(ctx, {
-      data: args.fileData,
-      filename: args.filename,
-      size: args.fileSize,
-      type: args.mimeType,
-    }, {
-      folder: "large-uploads",
-      chunkSize: 1024 * 1024 * 5, // 5MB chunks
-      onProgress: (progress) => {
-        // Update UI with progress
-        console.log(`Progress: ${Math.round(progress.percentage)}%`);
-      },
-      onChunkComplete: (chunkIndex, totalChunks) => {
-        console.log(`Chunk ${chunkIndex + 1}/${totalChunks} uploaded`);
-      },
+    return await ctx.runMutation(components.cloudinary.lib.finalizeUpload, {
+      publicId: args.publicId,
+      uploadResult: args.uploadResult,
+      userId: args.userId,
     });
   },
 });
 ```
 
-### Progress Tracking Interface
-
-```ts
-interface ProgressInfo {
-  loaded: number;     // Bytes uploaded so far
-  total: number;      // Total bytes to upload
-  percentage: number; // Upload percentage (0-100)
-  speed: number;      // Upload speed in bytes/second
-  timeRemaining: number; // Estimated time remaining in seconds
-  currentChunk?: number; // Current chunk index (for chunked uploads)
-  totalChunks?: number;  // Total number of chunks
-}
-
-interface UploadOptions {
-  // ... existing options
-  onProgress?: (progress: ProgressInfo) => void;
-  onChunkComplete?: (chunkIndex: number, totalChunks: number) => void;
-  chunkSize?: number; // Chunk size in bytes (default: 5MB)
-  maxRetries?: number; // Max retry attempts per chunk (default: 3)
-  retryDelay?: number; // Delay between retries in ms (default: 1000)
-}
-```
-
-## Client-Side Integration
-
-### File Processing Helper
-
-A utility function to prepare files for upload:
-
-```ts
-// utils/fileHelper.ts
-export interface FileInfo {
-  data: string | ArrayBuffer;
-  filename: string;
-  size: number;
-  type: string;
-  isLarge: boolean;
-}
-
-export async function processFileForUpload(file: File): Promise<FileInfo> {
-  const isLarge = file.size > 5 * 1024 * 1024; // > 5MB
-  
-  let data: string | ArrayBuffer;
-  if (isLarge) {
-    // For large files, use ArrayBuffer
-    data = await file.arrayBuffer();
-  } else {
-    // For small files, use base64
-    data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-  
-  return {
-    data,
-    filename: file.name,
-    size: file.size,
-    type: file.type,
-    isLarge,
-  };
-}
-```
-
-### React Upload Component Example
+### Client-Side Direct Upload
 
 ```tsx
-// components/SmartUploader.tsx
-import { useState } from "react";
-import { useMutation } from "convex/react";
+// React component example
+import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { processFileForUpload } from "../utils/fileHelper";
 
-export function SmartUploader() {
-  const [progress, setProgress] = useState<number>(0);
-  const [uploading, setUploading] = useState(false);
-  const uploadSmart = useMutation(api.images.uploadSmartImage);
-  
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    setProgress(0);
-    
-    try {
-      const fileInfo = await processFileForUpload(file);
-      
-      const result = await uploadSmart({
-        fileData: fileInfo.data,
-        filename: fileInfo.filename,
-        fileSize: fileInfo.size,
-        mimeType: fileInfo.type,
-        folder: "user-uploads",
-      });
-      
-      if (result.success) {
-        console.log("Upload successful:", result);
+function LargeFileUploader() {
+  const getCredentials = useAction(api.images.getUploadCredentials);
+  const finalize = useAction(api.images.finalizeUpload);
+  const [progress, setProgress] = useState(0);
+
+  const handleUpload = async (file: File) => {
+    // Step 1: Get signed credentials
+    const credentials = await getCredentials({ filename: file.name });
+
+    // Step 2: Upload directly to Cloudinary
+    const formData = new FormData();
+    formData.append("file", file);
+    Object.entries(credentials.uploadParams).forEach(([key, value]) => {
+      if (value) formData.append(key, value);
+    });
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        setProgress(Math.round((e.loaded / e.total) * 100));
       }
-    } catch (error) {
-      console.error("Upload failed:", error);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-    }
+    };
+
+    const uploadResult = await new Promise((resolve, reject) => {
+      xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+      xhr.onerror = reject;
+      xhr.open("POST", credentials.uploadUrl);
+      xhr.send(formData);
+    });
+
+    // Step 3: Store metadata in Convex
+    await finalize({
+      publicId: uploadResult.public_id,
+      uploadResult,
+    });
   };
-  
+
   return (
     <div>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleFileUpload}
-        disabled={uploading}
-      />
-      {uploading && (
-        <div>
-          <p>Uploading: {progress}%</p>
-          <progress value={progress} max="100" />
-        </div>
-      )}
+      <input type="file" onChange={(e) => handleUpload(e.target.files[0])} />
+      {progress > 0 && <progress value={progress} max="100" />}
     </div>
   );
 }
 ```
 
-## Migration Guide
+### Using CloudinaryClient.uploadDirect (Simplified)
 
-### From Base64-Only to Smart Upload
-
-If you're upgrading from a previous version that only supported base64 uploads:
-
-#### Before (Base64 Only)
+The `CloudinaryClient` provides a convenient `uploadDirect` method that handles all three steps:
 
 ```ts
-// Old approach - base64 only
-export const uploadImage = action({
-  args: { base64Data: v.string() },
-  handler: async (ctx, args) => {
-    return await cloudinary.upload(ctx, args.base64Data, {
-      folder: "uploads",
-    });
-  },
+// In a React component with Convex action context
+const result = await cloudinary.uploadDirect(ctx, file, {
+  folder: "uploads",
+  onProgress: (progress) => setUploadProgress(progress),
+  validation: { maxSize: 50 * 1024 * 1024 }, // 50MB max
 });
 ```
 
-#### After (Smart Upload)
+### Choosing the Right Upload Method
+
+| File Size              | Recommended Method  | Why                         |
+| ---------------------- | ------------------- | --------------------------- |
+| < 10MB                 | `upload()` (base64) | Simple, works everywhere    |
+| > 10MB                 | `uploadDirect()`    | Bypasses Convex 16MB limit  |
+| Any size with progress | `uploadDirect()`    | Real-time progress tracking |
 
 ```ts
-// New approach - smart upload with automatic optimization
-export const uploadImage = action({
+// Helper to choose upload method
+if (CloudinaryClient.isLargeFile(file)) {
+  // Use direct upload
+  await cloudinary.uploadDirect(ctx, file, options);
+} else {
+  // Use base64 upload
+  const base64 = await CloudinaryClient.fileToBase64(file);
+  await cloudinary.upload(ctx, base64, options);
+}
+```
+
+## Exported Validators and Types
+
+The component exports validators following Convex conventions for consistent type definitions:
+
+```ts
+import {
+  vTransformation, // Validator for transformation options
+  vAsset, // Validator for internal asset (with Id<"assets">)
+  vAssetResponse, // Validator for external responses (with string _id)
+  vCloudinaryUploadResponse, // Validator for raw Cloudinary API responses
+  type Transformation, // TypeScript type derived from vTransformation
+  type Asset, // TypeScript type derived from vAsset
+  type AssetResponse, // TypeScript type derived from vAssetResponse
+  type CloudinaryUploadResult, // TypeScript type for Cloudinary responses
+} from "cloudinary-component/lib";
+```
+
+### Using Validators in Your Functions
+
+```ts
+import {
+  vAssetResponse,
+  vTransformation,
+  vCloudinaryUploadResponse,
+} from "cloudinary-component/lib";
+
+// Use in return validators - no more large inline objects!
+export const listImages = query({
+  args: {},
+  returns: v.array(vAssetResponse),
+  handler: async (ctx) => {
+    return await cloudinary.list(ctx);
+  },
+});
+
+// Use transformation validator
+export const transformImage = query({
   args: {
-    fileData: v.union(v.string(), v.bytes()),
-    filename: v.string(),
-    fileSize: v.number(),
-    mimeType: v.string(),
+    publicId: v.string(),
+    transformation: vTransformation,
   },
   handler: async (ctx, args) => {
-    return await cloudinary.uploadSmart(ctx, {
-      data: args.fileData,
-      filename: args.filename,
-      size: args.fileSize,
-      type: args.mimeType,
-    }, {
-      folder: "uploads",
-      // Automatic fallback to base64 for compatibility
-      fallbackToBase64: true,
-    });
+    return await cloudinary.transform(ctx, args.publicId, args.transformation);
   },
 });
-```
 
-### Breaking Changes in v2.0
-
-1. **File Size Detection**: Now required for smart upload
-2. **Progress Callbacks**: New optional progress tracking
-3. **Chunked Upload**: Large files are automatically chunked
-4. **Error Handling**: Enhanced error messages with retry information
-
-### Backwards Compatibility
-
-The original `upload()` method still works for base64 uploads:
-
-```ts
-// This still works - base64 upload
-const result = await cloudinary.upload(ctx, base64Data, options);
-
-// But this is now recommended - smart upload
-const result = await cloudinary.uploadSmart(ctx, fileData, options);
-```
-
-## Performance Comparison
-
-| File Size | Base64 Upload | Smart Upload | Direct Upload | Performance Gain |
-|-----------|---------------|--------------|---------------|------------------|
-| < 1MB     | ✅ Fast       | ✅ Fast      | ➖ Overhead   | ~Same            |
-| 1-5MB     | ⚠️ Moderate   | ✅ Fast      | ✅ Fast       | ~20% faster      |
-| 5-10MB    | ❌ Slow       | ✅ Good      | ✅ Good       | ~40% faster      |
-| 10-50MB   | ❌ Very Slow  | ✅ Good      | ✅ Good       | ~60% faster      |
-| > 50MB    | ❌ Fails      | ✅ Excellent | ✅ Excellent  | Upload possible  |
-
-### Memory Usage
-
-- **Base64**: Requires ~137% of file size in memory
-- **Direct Upload**: Requires only ~chunk size in memory
-- **Smart Upload**: Automatically chooses the most memory-efficient method
-
-## Advanced Usage
-
-### Custom Upload Strategy
-
-```ts
-export const uploadWithCustomStrategy = action({
+// Use Cloudinary upload response validator for direct uploads
+export const finalizeUpload = action({
   args: {
-    fileData: v.union(v.string(), v.bytes()),
-    filename: v.string(),
-    fileSize: v.number(),
+    publicId: v.string(),
+    uploadResult: vCloudinaryUploadResponse, // Validates all Cloudinary response fields
+    userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Custom logic for upload method selection
-    const useDirectUpload = args.fileSize > 2 * 1024 * 1024; // 2MB threshold
-    
-    if (useDirectUpload) {
-      return await cloudinary.uploadDirect(ctx, {
-        data: args.fileData as ArrayBuffer,
-        filename: args.filename,
-        size: args.fileSize,
-        type: "image/jpeg",
-      }, {
-        folder: "direct-uploads",
-        chunkSize: 1024 * 1024, // 1MB chunks
-        maxRetries: 5,
-      });
-    } else {
-      return await cloudinary.upload(ctx, args.fileData as string, {
-        folder: "base64-uploads",
-        filename: args.filename,
-      });
-    }
+    // ...
   },
 });
 ```
 
-### Batch Upload with Progress
+### Why Multiple Asset Validators?
 
-```ts
-export const uploadBatch = action({
-  args: {
-    files: v.array(v.object({
-      data: v.union(v.string(), v.bytes()),
-      filename: v.string(),
-      size: v.number(),
-      type: v.string(),
-    })),
-  },
-  handler: async (ctx, args) => {
-    const results = [];
-    
-    for (let i = 0; i < args.files.length; i++) {
-      const file = args.files[i];
-      
-      try {
-        const result = await cloudinary.uploadSmart(ctx, file, {
-          folder: "batch-uploads",
-          tags: [`batch-${Date.now()}`, `file-${i + 1}`],
-          onProgress: (progress) => {
-            console.log(`File ${i + 1}/${args.files.length}: ${progress.percentage}%`);
-          },
-        });
-        
-        results.push({ index: i, ...result });
-      } catch (error) {
-        results.push({
-          index: i,
-          success: false,
-          error: error.message,
-        });
-      }
-    }
-    
-    return {
-      totalFiles: args.files.length,
-      successful: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length,
-      results,
-    };
-  },
-});
-```
+- **`vAsset`**: Uses `v.id("assets")` - for use within the component where the table exists
+- **`vAssetResponse`**: Uses `v.string()` for `_id` - for use in your app, since IDs are serialized as strings when crossing component boundaries
+- **`vCloudinaryUploadResponse`**: Validates the raw response from Cloudinary's upload API, including all fields like `access_mode`, `asset_id`, `etag`, etc.
 
 ## API Reference
 
@@ -571,37 +416,18 @@ export const uploadBatch = action({
 
 #### `upload(ctx, base64Data, options?)`
 
-Upload a file to Cloudinary and store metadata in the database.
+Upload a file using base64 data. Best for files under ~10MB.
 
 ```ts
 const result = await cloudinary.upload(ctx, base64Data, {
-  filename: "example.jpg",
+  filename: "photo.jpg",
   folder: "uploads",
   tags: ["user-content"],
-  transformation: {
-    width: 500,
-    height: 500,
-    crop: "fill",
-  },
+  transformation: { width: 500, height: 500, crop: "fill" },
   publicId: "custom-id",
   userId: "user123",
 });
 ```
-
-**Parameters:**
-
-- `ctx`: Convex action context
-- `base64Data`: Base64 encoded file data (required)
-- `options`: Upload options object (optional)
-
-**Upload Options:**
-
-- `filename`: Original filename (optional)
-- `folder`: Cloudinary folder path (optional)
-- `tags`: Array of tags for organization (optional)
-- `transformation`: Image transformation parameters (optional)
-- `publicId`: Custom public ID (optional)
-- `userId`: User identifier for multi-tenancy (optional)
 
 **Returns:**
 
@@ -618,6 +444,30 @@ const result = await cloudinary.upload(ctx, base64Data, {
 }
 ```
 
+#### `uploadDirect(ctx, file, options?)`
+
+Upload directly to Cloudinary, bypassing Convex for the file transfer. Best for large files.
+
+```ts
+const result = await cloudinary.uploadDirect(ctx, file, {
+  folder: "large-uploads",
+  onProgress: (progress) => console.log(`${progress}%`),
+  validation: { maxSize: 100 * 1024 * 1024 },
+});
+```
+
+#### `generateUploadCredentials(ctx, options?)`
+
+Generate signed credentials for manual direct upload implementation.
+
+```ts
+const credentials = await cloudinary.generateUploadCredentials(ctx, {
+  folder: "uploads",
+  tags: ["direct"],
+});
+// Returns: { uploadUrl, uploadParams: { api_key, timestamp, signature, ... } }
+```
+
 #### `transform(ctx, publicId, transformation)`
 
 Generate a transformed URL for an existing image.
@@ -626,51 +476,16 @@ Generate a transformed URL for an existing image.
 const { transformedUrl, secureUrl } = await cloudinary.transform(
   ctx,
   "sample-image",
-  {
-    width: 300,
-    height: 300,
-    crop: "fill",
-    quality: "auto",
-    format: "webp",
-  }
+  { width: 300, height: 300, crop: "fill", quality: "auto", format: "webp" }
 );
-```
-
-**Parameters:**
-
-- `ctx`: Convex query context
-- `publicId`: Cloudinary public ID (required)
-- `transformation`: Transformation parameters (required)
-
-**Returns:**
-
-```ts
-{
-  transformedUrl: string;
-  secureUrl: string;
-}
 ```
 
 #### `delete(ctx, publicId)`
 
-Delete an image from both Cloudinary and the database.
+Delete an image from Cloudinary and the database.
 
 ```ts
 const result = await cloudinary.delete(ctx, "sample-image");
-```
-
-**Parameters:**
-
-- `ctx`: Convex action context
-- `publicId`: Cloudinary public ID (required)
-
-**Returns:**
-
-```ts
-{
-  success: boolean;
-  error?: string;
-}
 ```
 
 #### `list(ctx, options?)`
@@ -688,40 +503,17 @@ const images = await cloudinary.list(ctx, {
 });
 ```
 
-**Parameters:**
-
-- `ctx`: Convex query context
-- `options`: List options (optional)
-
-**List Options:**
-
-- `userId`: Filter by user ID (optional)
-- `folder`: Filter by folder (optional)
-- `tags`: Filter by tags array (optional)
-- `limit`: Maximum number of results (optional, default: 50)
-- `orderBy`: Sort by "uploadedAt" or "updatedAt" (optional, default: "uploadedAt")
-- `order`: Sort order "asc" or "desc" (optional, default: "asc")
-
-**Returns:** Array of asset objects
-
 #### `getAsset(ctx, publicId)`
 
-Get detailed information about a specific asset.
+Get a single asset by public ID.
 
 ```ts
 const asset = await cloudinary.getAsset(ctx, "sample-image");
 ```
 
-**Parameters:**
-
-- `ctx`: Convex query context
-- `publicId`: Cloudinary public ID (required)
-
-**Returns:** Asset object or null if not found
-
 #### `updateAsset(ctx, publicId, updates)`
 
-Update asset metadata (tags, custom metadata).
+Update asset metadata.
 
 ```ts
 const updated = await cloudinary.updateAsset(ctx, "sample-image", {
@@ -730,56 +522,30 @@ const updated = await cloudinary.updateAsset(ctx, "sample-image", {
 });
 ```
 
-**Parameters:**
-
-- `ctx`: Convex mutation context
-- `publicId`: Cloudinary public ID (required)
-- `updates`: Object with tags and/or metadata (required)
-
-**Returns:** Updated asset object or null if not found
-
-### Direct Component Functions
-
-If you prefer to use the component directly without the client wrapper:
+### Static Helper Methods
 
 ```ts
-// Upload
-await ctx.runAction(components.cloudinary.lib.upload, {
-  base64Data: "...",
-  config: { cloudName, apiKey, apiSecret },
-  // ... other options
-});
+// Convert File to base64 (browser only)
+const base64 = await CloudinaryClient.fileToBase64(file);
 
-// Transform
-await ctx.runQuery(components.cloudinary.lib.transform, {
-  publicId: "sample",
-  transformation: { width: 300, height: 300 },
-  config: { cloudName, apiKey, apiSecret },
-});
+// Check if file should use direct upload
+const isLarge = CloudinaryClient.isLargeFile(file, 10 * 1024 * 1024);
 
-// List assets
-await ctx.runQuery(components.cloudinary.lib.listAssets, {
-  folder: "uploads",
-  config: { cloudName, apiKey, apiSecret },
-});
-
-// Delete asset
-await ctx.runAction(components.cloudinary.lib.deleteAsset, {
-  publicId: "sample",
-  config: { cloudName, apiKey, apiSecret },
+// Validate file before upload
+await CloudinaryClient.validateFile(file, {
+  maxSize: 50 * 1024 * 1024,
+  allowedTypes: ["image/jpeg", "image/png", "image/webp"],
 });
 ```
 
 ## Transformation Options
-
-The component supports all Cloudinary transformation parameters:
 
 ```ts
 interface CloudinaryTransformation {
   width?: number; // Resize width (1-4000)
   height?: number; // Resize height (1-4000)
   crop?: string; // "fill" | "fit" | "crop" | "scale" | "thumb" | "pad" | "limit"
-  quality?: string | number; // "auto" | "best" | "good" | "eco" | "low" | 1-100
+  quality?: string; // "auto" | "best" | "good" | "eco" | "low"
   format?: string; // "webp" | "jpg" | "png" | "avif" | "gif" | etc.
   gravity?: string; // "auto" | "face" | "center" | "north" | "south" | etc.
   radius?: number | string; // Border radius (0-2000) or "max" for circle
@@ -790,7 +556,7 @@ interface CloudinaryTransformation {
 
 ## Database Schema
 
-The component automatically creates an `assets` table with the following structure:
+The component creates an `assets` table:
 
 ```ts
 {
@@ -814,48 +580,32 @@ The component automatically creates an `assets` table with the following structu
 }
 ```
 
-**Indexes:**
-
-- `by_publicId`: Fast lookup by Cloudinary public ID
-- `by_userId`: Filter assets by user
-- `by_folder`: Filter assets by folder
-- `by_tags`: Filter assets by tags
-- `by_uploadedAt`: Sort by upload time
+**Indexes:** `by_publicId`, `by_userId`, `by_folder`, `by_uploadedAt`
 
 ## File Validation
 
-The component automatically validates:
+Built-in validation includes:
 
-- **File Types**: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG, and more
-- **File Size**: Maximum 10MB (configurable)
-- **Dimensions**: Width/height between 1-4000 pixels
-- **Format**: Valid file extensions and MIME types
+- **File Types**: JPEG, PNG, GIF, WebP, BMP, TIFF, SVG
+- **File Size**: Configurable (default 10MB for base64, 100MB for direct)
+- **Dimensions**: Width/height 1-4000 pixels
 - **Security**: Safe filename and folder path validation
 
-## Error Handling
+## ⚠️ Important: Cloudinary Plan Limits
 
-The component includes comprehensive error handling:
+Cloudinary enforces file size and API limits based on your subscription plan. Uploads exceeding these limits will fail.
 
-```ts
-export const uploadWithErrorHandling = action({
-  args: { base64Data: v.string() },
-  handler: async (ctx, args) => {
-    try {
-      const result = await cloudinary.upload(ctx, args.base64Data, {
-        folder: "uploads",
-      });
+| Limit                         | Free   | Plus  | Advanced | Enterprise |
+| ----------------------------- | ------ | ----- | -------- | ---------- |
+| **Max image file size**       | 10 MB  | 20 MB | 40 MB    | Custom     |
+| **Max video file size**       | 100 MB | 2 GB  | 4 GB     | Custom     |
+| **Max raw file size**         | 10 MB  | 20 MB | 40 MB    | Custom     |
+| **Max image megapixels**      | 25 MP  | 25 MP | 50 MP    | Custom     |
+| **Admin API hourly requests** | 500    | 2,000 | 2,000    | Custom     |
 
-      if (!result.success) {
-        throw new Error(result.error || "Upload failed");
-      }
-      return result;
-    } catch (error) {
-      console.error("Upload error:", error);
-      throw error;
-    }
-  },
-});
-```
+> **Note for Free Plan Users:** The free tier limits images to **10 MB** and videos to **100 MB**. Attempting to upload larger files will result in an error. Consider upgrading your plan if you need to handle larger files.
+
+For the latest limits and pricing, see [Cloudinary Pricing](https://cloudinary.com/pricing/compare-plans).
 
 ## Best Practices
 
@@ -864,45 +614,56 @@ export const uploadWithErrorHandling = action({
 - Never expose Cloudinary credentials in client-side code
 - Use environment variables for all API keys
 - Validate file types and sizes before upload
-- Implement user-based access controls
+- Use `userId` field for multi-tenant access control
 
 ### Performance
 
-- Use appropriate transformations for your use case
-- Leverage Cloudinary's `f_auto,q_auto` for optimal delivery
-- Implement asset cleanup for deleted content
+- Use `uploadDirect()` for files over 10MB
+- Leverage `f_auto,q_auto` transformations for optimal delivery
 - Use database indexes for efficient queries
 
 ### Organization
 
-- Use folders to organize assets (`folder: "users/avatars"`)
-- Tag assets for easy filtering (`tags: ["profile", "verified"]`)
+- Use folders: `folder: "users/avatars"`
+- Tag assets: `tags: ["profile", "verified"]`
 - Use meaningful public_ids for important assets
-- Implement asset cleanup for deleted content
 
-### Environment Setup
-
-Always validate environment variables:
+## Error Handling
 
 ```ts
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-const apiKey = process.env.CLOUDINARY_API_KEY;
-const apiSecret = process.env.CLOUDINARY_API_SECRET;
+const result = await cloudinary.upload(ctx, base64Data, options);
 
-if (!cloudName || !apiKey || !apiSecret) {
-  throw new Error("Cloudinary environment variables not set");
+if (!result.success) {
+  console.error("Upload failed:", result.error);
+  throw new Error(result.error || "Upload failed");
 }
 
-const cloudinary = new CloudinaryClient(components.cloudinary, {
-  cloudName,
-  apiKey,
-  apiSecret,
-});
+console.log("Uploaded:", result.secureUrl);
 ```
 
-## Example Project
+## Troubleshooting
 
-Run the complete example:
+**"Credentials not found" error:**
+
+- Verify environment variables are set: `npx convex env list`
+- Check Cloudinary dashboard for correct credentials
+
+**Upload fails for large files:**
+
+- Files over ~10MB need `uploadDirect()` to bypass 16MB limit
+- Check Cloudinary account limits (free tier: 10MB per file)
+
+**Type errors with validators:**
+
+- Use `vAssetResponse` (not `vAsset`) in your app's return validators
+- Run `npx convex dev` to regenerate types
+
+**Images not loading:**
+
+- Verify the public_id exists in Cloudinary
+- Check your cloud name is correct
+
+## Example Project
 
 ```bash
 git clone https://github.com/imaxisXD/cloudinary-convex
@@ -911,51 +672,9 @@ npm run setup
 npm run dev
 ```
 
-The example includes:
-
-- File upload with base64 conversion
-- Real-time transformation preview
-- Image gallery with management
-- Error handling demonstrations
-- Both CloudinaryClient and direct component usage examples
-
-## Troubleshooting
-
-### Common Issues
-
-**"Credentials not found" error:**
-
-- Verify environment variables are set in Convex
-- Check Cloudinary dashboard for correct credentials
-- Ensure variables are set in the correct Convex deployment
-
-**Images not loading:**
-
-- Verify the public_id exists in Cloudinary
-- Check your cloud name is correct
-- Ensure the asset hasn't been deleted
-
-**Upload failures:**
-
-- Check file size limits (default: 10MB for free accounts)
-- Verify supported file formats
-- Check network connectivity
-
-**Type errors:**
-
-- Run `npx convex dev` to regenerate types
-- Ensure you're importing from the correct paths
-- Check that the component is properly installed in convex.config.ts
-
-**Missing config parameter:**
-
-- Always pass the config object with Cloudinary credentials
-- Use environment variables for sensitive data
-- Ensure config is passed to all component functions
-
 ## Contributing
 
-Contributions welcome! Please read our [contributing guide](CONTRIBUTING.md) for details.
+Contributions welcome! Please read our [contributing guide](CONTRIBUTING.md).
 
 ## License
 

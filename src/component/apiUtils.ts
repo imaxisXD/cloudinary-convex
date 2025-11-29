@@ -274,6 +274,8 @@ export async function generateDirectUploadSignature(
 }
 
 // Verify upload completion by checking if asset exists in Cloudinary
+// Note: This function uses Basic Auth for simplicity; signature-based verification
+// could be implemented in the future if needed.
 export async function verifyUploadCompletion(
   cloudName: string,
   apiKey: string,
@@ -282,11 +284,8 @@ export async function verifyUploadCompletion(
   resourceType: string = "image"
 ): Promise<boolean> {
   try {
-    const adminUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
-
-    // Generate signature for admin API call
-    const params = { public_id: publicId };
-    const { signature, timestamp } = await generateSignature(params, apiSecret);
+    // Using Basic Auth for admin API access
+    const adminUrl = `https://api.cloudinary.com/v1_1/${cloudName}/resources/${resourceType}/upload/${publicId}`;
 
     // Make API call to check if asset exists
     const response = await fetch(adminUrl, {
@@ -344,16 +343,9 @@ export async function generateDirectUploadCredentials(
   }
 
   // Generate signature (without api_key)
-  console.log("Debug: Parameters being signed:", paramsToSign);
   const { signature, timestamp } = await generateDirectUploadSignature(
     paramsToSign,
     apiSecret
-  );
-  console.log(
-    "Debug: Generated signature:",
-    signature,
-    "timestamp:",
-    timestamp
   );
 
   // Build final upload parameters (INCLUDE api_key for the actual upload)
@@ -375,8 +367,6 @@ export async function generateDirectUploadCredentials(
       uploadParams.transformation = transformationString;
     }
   }
-
-  console.log("Debug: Final upload parameters:", uploadParams);
 
   return {
     uploadUrl,

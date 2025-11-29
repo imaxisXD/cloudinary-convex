@@ -7,15 +7,29 @@ import type {
   UploadOptions,
   ListAssetsOptions,
   CloudinaryComponent,
+  CloudinaryAsset,
 } from "../client/index.js";
+
+// Upload result type matching the backend response
+export interface UploadResult {
+  success: boolean;
+  publicId?: string;
+  secureUrl?: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  bytes?: number;
+  error?: string;
+}
 
 // Upload hook with progress tracking
 export function useCloudinaryUpload(component: CloudinaryComponent) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const uploadAction = useAction((component.lib as any).upload);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<UploadResult | null>(null);
 
   const upload = useCallback(
     async (file: File | string, options?: UploadOptions) => {
@@ -89,8 +103,10 @@ export function useCloudinaryImage(
   publicId: string | null,
   transformation?: CloudinaryTransformation
 ) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
+  const libTransform = (component.lib as any).transform;
   const transformedUrl = useQuery(
-    (component.lib as any).transform,
+    libTransform,
     publicId && transformation ? { publicId, transformation } : "skip"
   );
 
@@ -106,7 +122,9 @@ export function useCloudinaryAssets(
   component: CloudinaryComponent,
   options?: ListAssetsOptions
 ) {
-  const assets = useQuery((component.lib as any).listAssets, options || {});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
+  const libListAssets = (component.lib as any).listAssets;
+  const assets = useQuery(libListAssets, options || {}) as CloudinaryAsset[] | undefined;
 
   return {
     assets: assets || [],
@@ -119,10 +137,12 @@ export function useCloudinaryAsset(
   component: CloudinaryComponent,
   publicId: string | null
 ) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
+  const libGetAsset = (component.lib as any).getAsset;
   const asset = useQuery(
-    (component.lib as any).getAsset,
+    libGetAsset,
     publicId ? { publicId } : "skip"
-  );
+  ) as CloudinaryAsset | null | undefined;
 
   return {
     asset,
@@ -132,7 +152,9 @@ export function useCloudinaryAsset(
 
 // Hook for asset operations (delete, update)
 export function useCloudinaryOperations(component: CloudinaryComponent) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const deleteAction = useAction((component.lib as any).deleteAsset);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateMutation = useMutation((component.lib as any).updateAsset);
 
   const deleteAsset = useCallback(
@@ -143,7 +165,7 @@ export function useCloudinaryOperations(component: CloudinaryComponent) {
   );
 
   const updateAsset = useCallback(
-    async (publicId: string, updates: { tags?: string[]; metadata?: any }) => {
+    async (publicId: string, updates: { tags?: string[]; metadata?: Record<string, unknown> }) => {
       return updateMutation({ publicId, ...updates });
     },
     [updateMutation]
@@ -181,7 +203,7 @@ export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
     publicId,
     transformation
   );
-  const [imageLoading, setImageLoading] = useState(true);
+  const [_imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
   if (isLoading) {
@@ -208,7 +230,7 @@ export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
 // File upload component with drag and drop
 export interface CloudinaryUploadProps {
   component: CloudinaryComponent;
-  onUploadComplete?: (result: any) => void;
+  onUploadComplete?: (result: UploadResult) => void;
   onUploadError?: (error: string) => void;
   options?: UploadOptions;
   accept?: string;
@@ -259,7 +281,7 @@ export const CloudinaryUpload: React.FC<CloudinaryUploadProps> = ({
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
-        handleFiles(e.target.files);
+        void handleFiles(e.target.files);
       }
     },
     [handleFiles]
@@ -270,7 +292,7 @@ export const CloudinaryUpload: React.FC<CloudinaryUploadProps> = ({
       e.preventDefault();
       setIsDragOver(false);
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleFiles(e.dataTransfer.files);
+        void handleFiles(e.dataTransfer.files);
       }
     },
     [handleFiles]

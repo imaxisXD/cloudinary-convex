@@ -152,6 +152,25 @@ export async function uploadDirectToCloudinary(
 }
 
 /**
+ * Calculate appropriate timeout based on file size
+ * Assumes minimum 100KB/s upload speed as worst case
+ * @param fileSize File size in bytes
+ * @returns Timeout in milliseconds
+ */
+function calculateTimeout(fileSize: number): number {
+  // Base timeout of 60 seconds
+  const baseTimeout = 60 * 1000;
+
+  // Add 1 second per 100KB of file size (assumes ~100KB/s minimum upload speed)
+  const sizeBasedTimeout = (fileSize / (100 * 1024)) * 1000;
+
+  // Maximum timeout of 10 minutes for very large files
+  const maxTimeout = 10 * 60 * 1000;
+
+  return Math.min(baseTimeout + sizeBasedTimeout, maxTimeout);
+}
+
+/**
  * Perform the actual upload using XMLHttpRequest
  * @param file File to upload
  * @param credentials Upload credentials
@@ -171,7 +190,6 @@ function performUpload(
     formData.append("file", file);
 
     // Add all upload parameters
-    console.log("Debug: Upload credentials received:", credentials);
     Object.entries(credentials.uploadParams).forEach(([key, value]) => {
       // Ensure all values are strings and not empty
       const stringValue = String(value);
@@ -180,10 +198,7 @@ function performUpload(
         stringValue !== "undefined" &&
         stringValue !== "null"
       ) {
-        console.log(`Debug: Adding param ${key}:`, stringValue);
         formData.append(key, stringValue);
-      } else {
-        console.log(`Debug: Skipping empty param ${key}:`, value);
       }
     });
 
@@ -245,7 +260,9 @@ function performUpload(
 
     // Handle timeout
     xhr.addEventListener("timeout", () => {
-      const error = new Error("Upload timeout") as UploadError;
+      const error = new Error(
+        `Upload timeout - file size: ${Math.round(file.size / (1024 * 1024))}MB. Try a faster connection or smaller file.`
+      ) as UploadError;
       error.status = 408;
       error.retryable = true;
       reject(error);
@@ -261,8 +278,9 @@ function performUpload(
     // Configure and start upload
     xhr.open("POST", credentials.uploadUrl);
 
-    // Set timeout (30 seconds for large files)
-    xhr.timeout = 30000;
+    // Set dynamic timeout based on file size
+    // Base: 60s + additional time based on file size (max 10 minutes)
+    xhr.timeout = calculateTimeout(file.size);
 
     // Send the request
     xhr.send(formData);

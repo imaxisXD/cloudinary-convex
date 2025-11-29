@@ -11,6 +11,13 @@ process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
 process.env.CLOUDINARY_API_KEY = '123456789012345';
 process.env.CLOUDINARY_API_SECRET = 'test-secret-key-123456789';
 
+// Mock config object for API calls
+const mockConfig = {
+  cloudName: 'test-cloud',
+  apiKey: '123456789012345',
+  apiSecret: 'test-secret-key-123456789',
+};
+
 // Mock base64 image data (1x1 transparent PNG)
 const mockImageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
@@ -48,7 +55,8 @@ describe("Cloudinary component lib", () => {
       base64Data: mockImageBase64,
       filename: 'test.png',
       folder: 'test-uploads',
-      tags: ['test']
+      tags: ['test'],
+      config: mockConfig,
     });
     
     expect(result.success).toBe(true);
@@ -65,7 +73,8 @@ describe("Cloudinary component lib", () => {
         width: 300,
         height: 300,
         crop: 'fill'
-      }
+      },
+      config: mockConfig,
     });
     
     expect(result.transformedUrl).toContain('test-cloud');
@@ -81,13 +90,15 @@ describe("Cloudinary component lib", () => {
       base64Data: mockImageBase64,
       filename: 'test.png',
       folder: 'test-folder',
-      tags: ['test-tag']
+      tags: ['test-tag'],
+      config: mockConfig,
     });
     
     // Then list assets
     const result = await t.query(api.lib.listAssets, {
       folder: 'test-folder',
-      limit: 10
+      limit: 10,
+      config: mockConfig,
     });
     
     expect(Array.isArray(result)).toBe(true);
@@ -102,12 +113,14 @@ describe("Cloudinary component lib", () => {
     // Upload an asset first
     const uploadResult = await t.action(api.lib.upload, {
       base64Data: mockImageBase64,
-      filename: 'test.png'
+      filename: 'test.png',
+      config: mockConfig,
     });
     
     // Get the asset
     const asset = await t.query(api.lib.getAsset, {
-      publicId: uploadResult.publicId!
+      publicId: uploadResult.publicId!,
+      config: mockConfig,
     });
     
     expect(asset).not.toBeNull();
@@ -120,10 +133,11 @@ describe("Cloudinary component lib", () => {
     // Upload an asset first
     const uploadResult = await t.action(api.lib.upload, {
       base64Data: mockImageBase64,
-      filename: 'test.png'
+      filename: 'test.png',
+      config: mockConfig,
     });
     
-    // Update the asset
+    // Update the asset (updateAsset mutation doesn't require config)
     const updatedAsset = await t.mutation(api.lib.updateAsset, {
       publicId: uploadResult.publicId!,
       tags: ['updated', 'test'],
@@ -141,19 +155,22 @@ describe("Cloudinary component lib", () => {
     // Upload an asset first
     const uploadResult = await t.action(api.lib.upload, {
       base64Data: mockImageBase64,
-      filename: 'test.png'
+      filename: 'test.png',
+      config: mockConfig,
     });
     
     // Delete the asset
     const deleteResult = await t.action(api.lib.deleteAsset, {
-      publicId: uploadResult.publicId!
+      publicId: uploadResult.publicId!,
+      config: mockConfig,
     });
     
     expect(deleteResult.success).toBe(true);
     
     // Verify it's deleted from database
     const asset = await t.query(api.lib.getAsset, {
-      publicId: uploadResult.publicId!
+      publicId: uploadResult.publicId!,
+      config: mockConfig,
     });
     expect(asset).toBeNull();
   });
@@ -164,7 +181,8 @@ describe("Cloudinary component lib", () => {
     // Test with invalid base64 data
     const result = await t.action(api.lib.upload, {
       base64Data: 'invalid-data',
-      filename: 'test.png'
+      filename: 'test.png',
+      config: mockConfig,
     });
     
     expect(result.success).toBe(false);
@@ -181,7 +199,8 @@ describe("Cloudinary component lib", () => {
           width: -1,  // Invalid width
           height: 300,
           crop: 'fill'
-        }
+        },
+        config: mockConfig,
       });
       expect.fail('Should have thrown validation error');
     } catch (error) {
