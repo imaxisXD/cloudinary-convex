@@ -1,6 +1,6 @@
 # Cloudinary Component for Convex
 
-[![npm version](https://badge.fury.io/js/cloudinary-component.svg)](https://badge.fury.io/js/cloudinary-component)
+[![npm version](https://badge.fury.io/js/@imaxis%2Fcloudinary-convex.svg)](https://www.npmjs.com/package/@imaxis/cloudinary-convex)
 
 A comprehensive Cloudinary integration component for Convex that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support.
 
@@ -87,7 +87,7 @@ Browser → Convex Action → Cloudinary API → Store metadata in DB
 ## Installation
 
 ```bash
-npm install cloudinary-component
+npm install @imaxis/cloudinary-convex
 ```
 
 ## Setup
@@ -99,7 +99,7 @@ Create or update your `convex.config.ts` file:
 ```ts
 // convex/convex.config.ts
 import { defineApp } from "convex/server";
-import cloudinary from "cloudinary-component/convex.config";
+import cloudinary from "@imaxis/cloudinary-convex/convex.config";
 
 const app = defineApp();
 app.use(cloudinary);
@@ -125,9 +125,9 @@ npx convex env set CLOUDINARY_API_SECRET your_api_secret_here
 // convex/images.ts
 import { action, query } from "./_generated/server";
 import { components } from "./_generated/api";
-import { CloudinaryClient } from "cloudinary-component";
+import { CloudinaryClient } from "@imaxis/cloudinary-convex";
 // Import the shared validator for consistent return types
-import { vAssetResponse } from "cloudinary-component/lib";
+import { vAssetResponse } from "@imaxis/cloudinary-convex/lib";
 import { v } from "convex/values";
 
 // Validate environment variables
@@ -359,7 +359,7 @@ import {
   type Asset, // TypeScript type derived from vAsset
   type AssetResponse, // TypeScript type derived from vAssetResponse
   type CloudinaryUploadResult, // TypeScript type for Cloudinary responses
-} from "cloudinary-component/lib";
+} from "@imaxis/cloudinary-convex/lib";
 ```
 
 ### Using Validators in Your Functions
@@ -369,7 +369,7 @@ import {
   vAssetResponse,
   vTransformation,
   vCloudinaryUploadResponse,
-} from "cloudinary-component/lib";
+} from "@imaxis/cloudinary-convex/lib";
 
 // Use in return validators - no more large inline objects!
 export const listImages = query({
@@ -667,7 +667,7 @@ console.log("Uploaded:", result.secureUrl);
 
 ```bash
 git clone https://github.com/imaxisXD/cloudinary-convex
-cd cloudinary-component
+cd cloudinary-convex
 npm run setup
 npm run dev
 ```

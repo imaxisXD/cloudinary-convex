@@ -1,13 +1,14 @@
 {
-  "name": "cloudinary-component",
+  "name": "@imaxis/cloudinary-convex",
   "description": "A Cloudinary integration component for Convex providing image upload, transformation, and management capabilities.",
-  "repository": "github:your-username/cloudinary-component",
-  "homepage": "https://github.com/your-username/cloudinary-component#readme",
+  "repository": "github:imaxisXD/cloudinary-convex",
+  "homepage": "https://github.com/imaxisXD/cloudinary-convex#readme",
   "bugs": {
     "email": "support@convex.dev",
-    "url": "https://github.com/your-username/cloudinary-component/issues"
+    "url": "https://github.com/imaxisXD/cloudinary-convex/issues"
   },
   "version": "0.1.0",
+  "author": "Abhishek Kumar (https://github.com/imaxisXD)",
   "license": "Apache-2.0",
   "keywords": [
     "convex",
@@ -36,7 +37,7 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
     "lint": "eslint src",
-    "attw": "attw $(npm pack -s) --exclude-entrypoints ./convex.config --profile esm-only",
+    "attw": "attw $(npm pack -s) --exclude-entrypoints ./convex.config ./lib --profile esm-only",
     "version": "pbcopy <<<$npm_package_version; vim CHANGELOG.md && git add CHANGELOG.md"
   },
   "files": [
@@ -54,6 +55,11 @@
       "@convex-dev/component-source": "./src/react/index.tsx",
       "types": "./dist/react/index.d.ts",
       "default": "./dist/react/index.js"
+    },
+    "./lib": {
+      "@convex-dev/component-source": "./src/component/lib.ts",
+      "types": "./dist/component/lib.d.ts",
+      "default": "./dist/component/lib.js"
     },
     "./convex.config": {
       "@convex-dev/component-source": "./src/component/convex.config.ts",
