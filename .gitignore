@@ -13,3 +13,8 @@ node_modules
 # npm pack output
 *.tgz
 *.tsbuildinfo
+
+# Environment files (prevent accidental commits of secrets)
+.env
+.env.*
+!.env.example
