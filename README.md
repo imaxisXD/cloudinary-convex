@@ -5,7 +5,7 @@
 
 - **[Example Repo (Studio App)](https://github.com/imaxisXD/cloudinary-convex-studio)**
 
-A comprehensive Cloudinary integration component for Convex that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support.
+A Convex Component for Cloudinary integration that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support.
 
 <!-- START: Include on https://convex.dev/components -->
 
