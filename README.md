@@ -1,6 +1,6 @@
 # Cloudinary Component for Convex
 
-[![npm version](https://badge.fury.io/js/@imaxis%2Fcloudinary-convex.svg)](https://www.npmjs.com/package/@imaxis/cloudinary-convex)
+[![npm version](https://img.shields.io/npm/v/@imaxis/cloudinary-convex.svg)](https://www.npmjs.com/package/@imaxis/cloudinary-convex)
 [![Live Demo](https://img.shields.io/badge/demo-online-green.svg)](https://cloudinary-convex-studio.vercel.app/)
 
 - **[Example Repo (Studio App)](https://github.com/imaxisXD/cloudinary-convex-studio)**
