@@ -3,6 +3,8 @@
 [![npm version](https://badge.fury.io/js/@imaxis%2Fcloudinary-convex.svg)](https://www.npmjs.com/package/@imaxis/cloudinary-convex)
 [![Live Demo](https://img.shields.io/badge/demo-online-green.svg)](https://cloudinary-convex-studio.vercel.app/)
 
+- **[Example Repo (Studio App)](https://github.com/imaxisXD/cloudinary-convex-studio)**
+
 A comprehensive Cloudinary integration component for Convex that provides image upload, transformation, and management capabilities using direct Cloudinary REST APIs with full TypeScript support.
 
 <!-- START: Include on https://convex.dev/components -->
@@ -164,6 +166,7 @@ The component manages an `assets` table:
 ## Resources
 
 - **[Live Demo](https://cloudinary-convex-studio.vercel.app/)**
+- **[Example Repo (Studio App)](https://github.com/imaxisXD/cloudinary-convex-studio)**
 - **[Convex Documentation](https://docs.convex.dev)**
 - **[Cloudinary API Reference](https://cloudinary.com/documentation/image_upload_api_reference)**
 - **[GitHub Repository](https://github.com/imaxisXD/cloudinary-convex)**
