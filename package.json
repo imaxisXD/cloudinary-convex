@@ -67,7 +67,6 @@
       "default": "./dist/component/convex.config.js"
     }
   },
-  "dependencies": {},
   "peerDependencies": {
     "convex": "^1.24.8",
     "react": "^18.3.1 || ^19.0.0"
@@ -89,6 +88,7 @@
     "tsc-alias": "^1.8.16",
     "typescript": "5.5.4",
     "typescript-eslint": "8.34.1",
+    "vite": "^5.4.21",
     "vitest": "3.2.4"
   },
   "types": "./dist/client/index.d.ts",

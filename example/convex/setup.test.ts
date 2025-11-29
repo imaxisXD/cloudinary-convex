@@ -4,12 +4,9 @@ import { convexTest } from "convex-test";
 import schema from "./schema.js";
 export const modules = import.meta.glob("./**/*.*s");
 
-// This is how users write tests that use your component.
-import componentSchema from "../node_modules/cloudinary-component/src/component/schema.js";
+import componentSchema from "../../src/component/schema.js";
 export { componentSchema };
-export const componentModules = import.meta.glob(
-  "../node_modules/cloudinary-component/src/component/**/*.ts"
-);
+export const componentModules = import.meta.glob("../../src/component/**/*.ts");
 
 export function initConvexTest() {
   const t = convexTest(schema, modules);
