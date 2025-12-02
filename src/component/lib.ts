@@ -25,18 +25,56 @@ import {
 /**
  * Validator for Cloudinary transformation options.
  * Use this for specifying image transformations like resize, crop, effects, etc.
+ *
+ * @see CloudinaryTransformation in apiUtils.ts for detailed documentation of each option
  */
 export const vTransformation = v.object({
+  // Dimensions
   width: v.optional(v.number()),
   height: v.optional(v.number()),
+
+  // Crop and positioning
   crop: v.optional(v.string()),
-  quality: v.optional(v.string()),
-  format: v.optional(v.string()),
   gravity: v.optional(v.string()),
+  x: v.optional(v.number()),
+  y: v.optional(v.number()),
+  zoom: v.optional(v.number()),
+  aspectRatio: v.optional(v.union(v.string(), v.number())),
+
+  // Quality and format
+  quality: v.optional(v.union(v.string(), v.number())),
+  format: v.optional(v.string()),
+  dpr: v.optional(v.union(v.number(), v.string())),
+
+  // Visual modifications
   radius: v.optional(v.union(v.number(), v.string())),
-  overlay: v.optional(v.string()),
+  angle: v.optional(v.union(v.number(), v.string())),
   effect: v.optional(v.string()),
-  angle: v.optional(v.number()),
+  opacity: v.optional(v.number()),
+
+  // Colors and backgrounds
+  background: v.optional(v.string()),
+  color: v.optional(v.string()),
+  border: v.optional(v.string()),
+
+  // Overlays
+  overlay: v.optional(v.string()),
+
+  // Document handling
+  density: v.optional(v.number()),
+  page: v.optional(v.number()),
+
+  // Default image
+  defaultImage: v.optional(v.string()),
+
+  // Named transformation
+  namedTransformation: v.optional(v.string()),
+
+  // Flags
+  flags: v.optional(v.union(v.string(), v.array(v.string()))),
+
+  // Raw transformation
+  rawTransformation: v.optional(v.string()),
 });
 
 /** TypeScript type for Cloudinary transformations, derived from vTransformation validator */
@@ -100,36 +138,196 @@ export type AssetResponse = Infer<typeof vAssetResponse>;
 
 /**
  * Validator for the raw Cloudinary upload API response.
- * Use this when handling direct upload responses from Cloudinary.
- * Includes all fields that Cloudinary may return.
+ * Based on Cloudinary's official Upload API documentation.
+ * @see https://cloudinary.com/documentation/image_upload_api_reference
+ *
+ * Includes all documented fields that Cloudinary may return in an upload response.
  */
 export const vCloudinaryUploadResponse = v.object({
-  // Required fields
+  // ============================================
+  // REQUIRED FIELDS - Always present in response
+  // ============================================
+
+  /** The unique public identifier assigned to the asset */
   public_id: v.string(),
+
+  /** HTTPS URL for accessing the uploaded asset */
   secure_url: v.string(),
+
+  /** HTTP URL for accessing the uploaded asset */
   url: v.string(),
+
+  /** The format (extension) of the uploaded asset (e.g., "jpg", "png", "webp") */
   format: v.string(),
-  // Optional dimension/size fields
+
+  // ============================================
+  // DIMENSION & SIZE FIELDS
+  // ============================================
+
+  /** Width of the asset in pixels */
   width: v.optional(v.number()),
+
+  /** Height of the asset in pixels */
   height: v.optional(v.number()),
+
+  /** Size of the asset in bytes */
   bytes: v.optional(v.number()),
-  // Optional metadata fields
-  created_at: v.optional(v.string()),
-  tags: v.optional(v.array(v.string())),
-  folder: v.optional(v.string()),
-  original_filename: v.optional(v.string()),
-  // Additional fields returned by Cloudinary API
-  access_mode: v.optional(v.string()),
-  api_key: v.optional(v.string()),
+
+  /** Number of pages (for multi-page documents like PDFs) */
+  pages: v.optional(v.number()),
+
+  // ============================================
+  // IDENTIFICATION FIELDS
+  // ============================================
+
+  /** Unique asset identifier (internal Cloudinary ID) */
   asset_id: v.optional(v.string()),
-  etag: v.optional(v.string()),
-  existing: v.optional(v.boolean()),
-  placeholder: v.optional(v.boolean()),
-  resource_type: v.optional(v.string()),
-  signature: v.optional(v.string()),
-  type: v.optional(v.string()),
+
+  /** Version number of the asset (Unix timestamp) */
   version: v.optional(v.number()),
+
+  /** Unique version identifier string */
   version_id: v.optional(v.string()),
+
+  /** Signature for verifying the response authenticity */
+  signature: v.optional(v.string()),
+
+  /** ETag for cache validation */
+  etag: v.optional(v.string()),
+
+  // ============================================
+  // METADATA FIELDS
+  // ============================================
+
+  /** ISO 8601 timestamp when the asset was created */
+  created_at: v.optional(v.string()),
+
+  /** Array of tags associated with the asset */
+  tags: v.optional(v.array(v.string())),
+
+  /** Folder path where the asset is stored */
+  folder: v.optional(v.string()),
+
+  /** Original filename without extension */
+  original_filename: v.optional(v.string()),
+
+  /** Original file extension before any format conversion */
+  original_extension: v.optional(v.string()),
+
+  /** Display name of the asset in Media Library */
+  display_name: v.optional(v.string()),
+
+  /** Asset folder path in the new folder structure */
+  asset_folder: v.optional(v.string()),
+
+  // ============================================
+  // TYPE & ACCESS FIELDS
+  // ============================================
+
+  /** Resource type: "image", "video", "raw", or "auto" */
+  resource_type: v.optional(v.string()),
+
+  /** Delivery type: "upload", "private", "authenticated", etc. */
+  type: v.optional(v.string()),
+
+  /** Access mode: "public" or "authenticated" */
+  access_mode: v.optional(v.string()),
+
+  // ============================================
+  // STATUS FLAGS
+  // ============================================
+
+  /** Whether this asset already existed (for unique_filename uploads) */
+  existing: v.optional(v.boolean()),
+
+  /** Whether a placeholder was returned instead of the actual asset */
+  placeholder: v.optional(v.boolean()),
+
+  /** Whether the asset is being processed asynchronously */
+  done: v.optional(v.boolean()),
+
+  // ============================================
+  // API & SECURITY FIELDS
+  // ============================================
+
+  /** The API key used for this upload */
+  api_key: v.optional(v.string()),
+
+  /** Deletion token (if return_delete_token was set) */
+  delete_token: v.optional(v.string()),
+
+  // ============================================
+  // EAGER TRANSFORMATIONS
+  // ============================================
+
+  /** Array of eager transformation results */
+  eager: v.optional(
+    v.array(
+      v.object({
+        transformation: v.optional(v.string()),
+        width: v.optional(v.number()),
+        height: v.optional(v.number()),
+        bytes: v.optional(v.number()),
+        format: v.optional(v.string()),
+        url: v.optional(v.string()),
+        secure_url: v.optional(v.string()),
+      })
+    )
+  ),
+
+  // ============================================
+  // ANALYSIS & ADD-ON FIELDS
+  // ============================================
+
+  /** Predominant colors detected in the image */
+  colors: v.optional(v.array(v.array(v.any()))),
+
+  /** Image moderation results */
+  moderation: v.optional(v.array(v.any())),
+
+  /** Phash for image similarity detection */
+  phash: v.optional(v.string()),
+
+  /** Quality analysis score */
+  quality_analysis: v.optional(
+    v.object({
+      focus: v.optional(v.number()),
+    })
+  ),
+
+  /** Accessibility analysis results */
+  accessibility_analysis: v.optional(v.any()),
+
+  /** Context metadata (alt text, caption, custom data) */
+  context: v.optional(v.any()),
+
+  /** Image metadata (EXIF, IPTC, XMP) */
+  image_metadata: v.optional(v.any()),
+
+  /** Media metadata */
+  media_metadata: v.optional(v.any()),
+
+  /** Faces detected in the image */
+  faces: v.optional(v.array(v.array(v.number()))),
+
+  /** Illustration score (0-100, how illustrated vs photographic) */
+  illustration_score: v.optional(v.number()),
+
+  /** Semi-transparent detection */
+  semi_transparent: v.optional(v.boolean()),
+
+  /** Grayscale detection */
+  grayscale: v.optional(v.boolean()),
+
+  // ============================================
+  // ASYNC PROCESSING FIELDS
+  // ============================================
+
+  /** Batch ID for tracking async operations */
+  batch_id: v.optional(v.string()),
+
+  /** Status for async operations: "pending", "complete", "failed" */
+  status: v.optional(v.string()),
 });
 
 /** TypeScript type for Cloudinary upload response */
@@ -195,12 +393,25 @@ function validateFileData(base64Data: string, filename?: string): void {
 }
 
 // Helper function to validate transformation parameters
+// Note: This validation is intentionally permissive to support all Cloudinary options
+// Type-safety is enforced by TypeScript interfaces in apiUtils.ts
 function validateTransformation(transformation: Record<string, unknown>): void {
   if (!transformation || typeof transformation !== "object") return;
 
-  const { width, height, crop, quality, format, gravity, radius } =
-    transformation;
+  const {
+    width,
+    height,
+    crop,
+    quality,
+    format,
+    gravity,
+    radius,
+    opacity,
+    zoom,
+    dpr,
+  } = transformation;
 
+  // Dimension validation
   if (width !== undefined) {
     if (
       typeof width !== "number" ||
@@ -225,18 +436,28 @@ function validateTransformation(transformation: Record<string, unknown>): void {
     }
   }
 
+  // Crop validation - accept all valid Cloudinary crop modes
   if (crop !== undefined) {
     if (typeof crop !== "string") {
       throw new Error("Crop must be a string");
     }
     const validCrops = [
-      "fill",
-      "fit",
       "crop",
+      "fill",
+      "fill_pad",
+      "fit",
+      "limit",
+      "mfit",
+      "pad",
+      "lpad",
+      "mpad",
       "scale",
       "thumb",
-      "pad",
-      "limit",
+      "imagga_crop",
+      "imagga_scale",
+      "lfill",
+      "auto",
+      "auto_pad",
     ];
     if (!validCrops.includes(crop)) {
       throw new Error(
@@ -245,12 +466,13 @@ function validateTransformation(transformation: Record<string, unknown>): void {
     }
   }
 
+  // Quality validation - accept auto presets and numbers
   if (quality !== undefined) {
     if (typeof quality === "string") {
-      const validQualities = ["auto", "best", "good", "eco", "low"];
-      if (!validQualities.includes(quality)) {
+      // Accept "auto", "auto:best", "auto:good", "auto:eco", "auto:low", etc.
+      if (!quality.startsWith("auto") && isNaN(Number(quality))) {
         throw new Error(
-          `Invalid quality preset. Valid options: ${validQualities.join(", ")}`
+          "Quality must be 'auto', an auto variant (auto:best, auto:eco, etc.), or a number 1-100"
         );
       }
     } else if (typeof quality === "number") {
@@ -262,13 +484,19 @@ function validateTransformation(transformation: Record<string, unknown>): void {
     }
   }
 
+  // Format validation - accept all common image formats
   if (format !== undefined) {
     if (typeof format !== "string") {
       throw new Error("Format must be a string");
     }
     const validFormats = [
+      "auto",
       "jpg",
+      "jpeg",
       "png",
+      "png8",
+      "png24",
+      "png32",
       "gif",
       "bmp",
       "ico",
@@ -279,7 +507,6 @@ function validateTransformation(transformation: Record<string, unknown>): void {
       "jp2",
       "psd",
       "webp",
-      "zip",
       "svg",
       "webm",
       "wdp",
@@ -300,12 +527,16 @@ function validateTransformation(transformation: Record<string, unknown>): void {
     }
   }
 
+  // Gravity validation - accept compass, auto, face detection, and object detection
   if (gravity !== undefined) {
     if (typeof gravity !== "string") {
       throw new Error("Gravity must be a string");
     }
-    const validGravities = [
+    // Accept standard gravity values and allow custom object detection values
+    const standardGravities = [
       "auto",
+      "auto:subject",
+      "auto:classic",
       "center",
       "north",
       "south",
@@ -318,24 +549,57 @@ function validateTransformation(transformation: Record<string, unknown>): void {
       "face",
       "faces",
       "body",
+      "eyes",
       "adv_face",
       "adv_faces",
       "adv_eyes",
       "liquid",
       "ocr_text",
+      "custom",
     ];
-    if (!validGravities.includes(gravity)) {
+    // Allow any value that starts with a standard gravity or is for object detection
+    const isValid = standardGravities.some(
+      (g) => gravity === g || gravity.startsWith(g + ":")
+    );
+    if (!isValid && !/^[a-z_:]+$/.test(gravity)) {
+      throw new Error(`Invalid gravity value: ${gravity}`);
+    }
+  }
+
+  // Radius validation
+  if (radius !== undefined) {
+    if (typeof radius === "number" && (radius < 0 || radius > 2000)) {
+      throw new Error("Radius must be between 0 and 2000");
+    } else if (
+      typeof radius === "string" &&
+      !/^(max|\d+:\d+:\d+:\d+)$/.test(radius)
+    ) {
       throw new Error(
-        `Invalid gravity. Valid options: ${validGravities.join(", ")}`
+        'Radius string must be "max" or corner values like "20:30:40:50"'
       );
     }
   }
 
-  if (radius !== undefined) {
-    if (typeof radius === "number" && (radius < 0 || radius > 2000)) {
-      throw new Error("Radius must be between 0 and 2000");
-    } else if (typeof radius === "string" && radius !== "max") {
-      throw new Error('Radius string value must be "max"');
+  // Opacity validation
+  if (opacity !== undefined) {
+    if (typeof opacity !== "number" || opacity < 0 || opacity > 100) {
+      throw new Error("Opacity must be a number between 0 and 100");
+    }
+  }
+
+  // Zoom validation
+  if (zoom !== undefined) {
+    if (typeof zoom !== "number" || zoom < 0) {
+      throw new Error("Zoom must be a positive number");
+    }
+  }
+
+  // DPR validation
+  if (dpr !== undefined) {
+    if (typeof dpr === "number" && (dpr < 0.5 || dpr > 4)) {
+      throw new Error("DPR must be between 0.5 and 4");
+    } else if (typeof dpr === "string" && dpr !== "auto") {
+      throw new Error('DPR must be a number or "auto"');
     }
   }
 }
@@ -893,6 +1157,7 @@ export const generateUploadCredentials = action({
 export const finalizeUpload = mutation({
   args: {
     publicId: v.string(),
+    /** Type-safe Cloudinary upload response based on official API documentation */
     uploadResult: vCloudinaryUploadResponse,
     userId: v.optional(v.string()),
     folder: v.optional(v.string()),

@@ -276,6 +276,214 @@ function AssetManager({ publicId }: { publicId: string }) {
 />
 ```
 
+## Image Transformations
+
+The component provides **fully type-safe** transformation options with IntelliSense support. All transformation parameters are documented with JSDoc comments for easy discovery.
+
+### Basic Usage
+
+```tsx
+// In React with the transform hook
+const { transformedUrl } = useCloudinaryImage(
+  api.cloudinary.transform,
+  "my-image-id",
+  {
+    width: 300,
+    height: 200,
+    crop: "fill",
+    gravity: "auto",
+    quality: "auto",
+    format: "auto",
+  }
+);
+
+// Or with CloudinaryClient in Convex
+const result = await cloudinary.transform(ctx, "my-image-id", {
+  width: 300,
+  height: 200,
+  crop: "fill",
+});
+```
+
+### Transformation Options Reference
+
+#### Dimensions
+
+| Option   | Type     | Description             |
+| -------- | -------- | ----------------------- |
+| `width`  | `number` | Output width in pixels  |
+| `height` | `number` | Output height in pixels |
+
+#### Crop Modes
+
+| Mode         | Description                                              |
+| ------------ | -------------------------------------------------------- |
+| `"fill"`     | Scale and crop to fill exact dimensions (may crop edges) |
+| `"fit"`      | Scale to fit within dimensions (maintains aspect ratio)  |
+| `"crop"`     | Extract region (requires gravity or x/y coordinates)     |
+| `"thumb"`    | Generate thumbnail using face detection                  |
+| `"scale"`    | Resize without maintaining aspect ratio (may distort)    |
+| `"pad"`      | Resize and pad with background color to exact dimensions |
+| `"limit"`    | Like fit, but only scales down (never enlarges)          |
+| `"fill_pad"` | Fill with smart content-aware padding                    |
+| `"auto"`     | Automatic cropping based on content                      |
+
+#### Gravity Options
+
+| Gravity          | Description                               |
+| ---------------- | ----------------------------------------- |
+| `"auto"`         | AI-powered detection of important content |
+| `"face"`         | Focus on detected face                    |
+| `"faces"`        | Focus on multiple faces                   |
+| `"auto:subject"` | Focus on main subject                     |
+| `"center"`       | Center of the image                       |
+| `"north"`        | Top of the image                          |
+| `"south"`        | Bottom of the image                       |
+| `"east"`         | Right side                                |
+| `"west"`         | Left side                                 |
+| `"north_east"`   | Top-right corner                          |
+| `"south_west"`   | Bottom-left corner                        |
+
+#### Quality & Format
+
+| Option    | Values                                         | Description                            |
+| --------- | ---------------------------------------------- | -------------------------------------- |
+| `quality` | `"auto"`, `"auto:best"`, `"auto:eco"`, `1-100` | Compression quality                    |
+| `format`  | `"auto"`, `"webp"`, `"avif"`, `"jpg"`, `"png"` | Output format                          |
+| `dpr`     | `1`, `2`, `3`, `"auto"`                        | Device pixel ratio for retina displays |
+
+#### Visual Effects
+
+| Option    | Examples                                  | Description                  |
+| --------- | ----------------------------------------- | ---------------------------- |
+| `radius`  | `20`, `"max"`, `"20:30:40:50"`            | Border radius (max = circle) |
+| `angle`   | `90`, `180`, `-45`                        | Rotation in degrees          |
+| `effect`  | `"grayscale"`, `"sepia:80"`, `"blur:300"` | Visual effects               |
+| `opacity` | `0-100`                                   | Transparency level           |
+
+#### Colors & Backgrounds
+
+| Option       | Examples                  | Description                         |
+| ------------ | ------------------------- | ----------------------------------- |
+| `background` | `"white"`, `"rgb:FF0000"` | Background for padding/transparency |
+| `color`      | `"blue"`, `"rgb:00FF00"`  | Color for effects                   |
+| `border`     | `"3px_solid_black"`       | Add border around image             |
+
+#### Advanced Options
+
+| Option                | Description                                   |
+| --------------------- | --------------------------------------------- |
+| `overlay`             | Overlay another image or text                 |
+| `aspectRatio`         | Maintain aspect ratio (`"16:9"` or `1.5`)     |
+| `zoom`                | Zoom level for face/object crops              |
+| `defaultImage`        | Fallback image if not found                   |
+| `namedTransformation` | Apply a preset transformation                 |
+| `flags`               | Additional flags (`"progressive"`, `"lossy"`) |
+| `rawTransformation`   | Raw Cloudinary URL parameters                 |
+
+### Common Transformation Examples
+
+```tsx
+// Circular avatar with face detection
+{
+  width: 150,
+  height: 150,
+  crop: "thumb",
+  gravity: "face",
+  radius: "max"
+}
+
+// Optimized responsive image
+{
+  width: 800,
+  quality: "auto",
+  format: "auto",
+  dpr: "auto"
+}
+
+// Thumbnail with blur effect
+{
+  width: 200,
+  height: 200,
+  crop: "fill",
+  effect: "blur:100"
+}
+
+// Vintage sepia photo
+{
+  width: 600,
+  effect: "sepia:80",
+  quality: 85
+}
+
+// Grayscale with rounded corners
+{
+  width: 400,
+  height: 300,
+  crop: "fill",
+  effect: "grayscale",
+  radius: 20
+}
+
+// Image with text overlay
+{
+  width: 800,
+  overlay: "text:Arial_60_bold:Hello%20World",
+  gravity: "south",
+  y: 20
+}
+
+// Pixelated faces (privacy)
+{
+  effect: "pixelate_faces:15"
+}
+
+// Auto-enhanced quality
+{
+  width: 1200,
+  effect: "improve",
+  quality: "auto:best",
+  format: "auto"
+}
+```
+
+### Using with React Components
+
+```tsx
+import { CloudinaryImage } from "@imaxis/cloudinary-convex/react";
+
+// Profile avatar
+<CloudinaryImage
+  transformFn={api.cloudinary.transform}
+  publicId="user-photo"
+  transformation={{
+    width: 100,
+    height: 100,
+    crop: "thumb",
+    gravity: "face",
+    radius: "max",
+    quality: "auto",
+  }}
+  alt="User avatar"
+  className="rounded-full"
+/>
+
+// Hero banner with auto-optimization
+<CloudinaryImage
+  transformFn={api.cloudinary.transform}
+  publicId="hero-banner"
+  transformation={{
+    width: 1920,
+    height: 600,
+    crop: "fill",
+    gravity: "auto",
+    quality: "auto",
+    format: "auto",
+  }}
+  alt="Hero banner"
+/>
+```
+
 ## Handling Large Files (Direct Upload)
 
 For files larger than ~10MB, use the direct upload flow to bypass Convex's 16MB argument size limit. This uploads files directly from the browser to Cloudinary, with only metadata stored in Convex.

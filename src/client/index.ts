@@ -597,19 +597,139 @@ export class CloudinaryClient {
 // ============================================================================
 
 /**
- * Validator for transformation options.
+ * Validator for Cloudinary upload API response.
+ * Based on Cloudinary's official Upload API documentation.
+ * @see https://cloudinary.com/documentation/image_upload_api_reference
  */
-export const vTransformation = v.object({
+export const vCloudinaryUploadResponse = v.object({
+  // Required fields
+  public_id: v.string(),
+  secure_url: v.string(),
+  url: v.string(),
+  format: v.string(),
+
+  // Dimension & size fields
   width: v.optional(v.number()),
   height: v.optional(v.number()),
+  bytes: v.optional(v.number()),
+  pages: v.optional(v.number()),
+
+  // Identification fields
+  asset_id: v.optional(v.string()),
+  version: v.optional(v.number()),
+  version_id: v.optional(v.string()),
+  signature: v.optional(v.string()),
+  etag: v.optional(v.string()),
+
+  // Metadata fields
+  created_at: v.optional(v.string()),
+  tags: v.optional(v.array(v.string())),
+  folder: v.optional(v.string()),
+  original_filename: v.optional(v.string()),
+  original_extension: v.optional(v.string()),
+  display_name: v.optional(v.string()),
+  asset_folder: v.optional(v.string()),
+
+  // Type & access fields
+  resource_type: v.optional(v.string()),
+  type: v.optional(v.string()),
+  access_mode: v.optional(v.string()),
+
+  // Status flags
+  existing: v.optional(v.boolean()),
+  placeholder: v.optional(v.boolean()),
+  done: v.optional(v.boolean()),
+
+  // API & security fields
+  api_key: v.optional(v.string()),
+  delete_token: v.optional(v.string()),
+
+  // Eager transformations
+  eager: v.optional(
+    v.array(
+      v.object({
+        transformation: v.optional(v.string()),
+        width: v.optional(v.number()),
+        height: v.optional(v.number()),
+        bytes: v.optional(v.number()),
+        format: v.optional(v.string()),
+        url: v.optional(v.string()),
+        secure_url: v.optional(v.string()),
+      })
+    )
+  ),
+
+  // Analysis fields
+  colors: v.optional(v.array(v.array(v.any()))),
+  moderation: v.optional(v.array(v.any())),
+  phash: v.optional(v.string()),
+  quality_analysis: v.optional(v.object({ focus: v.optional(v.number()) })),
+  accessibility_analysis: v.optional(v.any()),
+  context: v.optional(v.any()),
+  image_metadata: v.optional(v.any()),
+  media_metadata: v.optional(v.any()),
+  faces: v.optional(v.array(v.array(v.number()))),
+  illustration_score: v.optional(v.number()),
+  semi_transparent: v.optional(v.boolean()),
+  grayscale: v.optional(v.boolean()),
+
+  // Async processing fields
+  batch_id: v.optional(v.string()),
+  status: v.optional(v.string()),
+});
+
+/**
+ * Validator for transformation options.
+ *
+ * @see CloudinaryTransformation in apiUtils.ts for detailed documentation of each option
+ */
+export const vTransformation = v.object({
+  // Dimensions
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+
+  // Crop and positioning
   crop: v.optional(v.string()),
-  quality: v.optional(v.string()),
-  format: v.optional(v.string()),
   gravity: v.optional(v.string()),
+  x: v.optional(v.number()),
+  y: v.optional(v.number()),
+  zoom: v.optional(v.number()),
+  aspectRatio: v.optional(v.union(v.string(), v.number())),
+
+  // Quality and format
+  quality: v.optional(v.union(v.string(), v.number())),
+  format: v.optional(v.string()),
+  dpr: v.optional(v.union(v.number(), v.string())),
+
+  // Visual modifications
   radius: v.optional(v.union(v.number(), v.string())),
-  overlay: v.optional(v.string()),
+  angle: v.optional(v.union(v.number(), v.string())),
   effect: v.optional(v.string()),
-  angle: v.optional(v.number()),
+  opacity: v.optional(v.number()),
+
+  // Colors and backgrounds
+  background: v.optional(v.string()),
+  color: v.optional(v.string()),
+  border: v.optional(v.string()),
+
+  // Overlays
+  overlay: v.optional(v.string()),
+
+  // Document handling
+  density: v.optional(v.number()),
+  page: v.optional(v.number()),
+
+  // Default image
+  defaultImage: v.optional(v.string()),
+
+  // Named transformation
+  namedTransformation: v.optional(v.string()),
+
+  // Flags
+  flags: v.optional(v.union(v.string(), v.array(v.string()))),
+
+  // Raw transformation
+  rawTransformation: v.optional(v.string()),
 });
 
 /**
@@ -909,30 +1029,8 @@ export function makeCloudinaryAPI(
     finalizeUpload: mutationGeneric({
       args: {
         publicId: v.string(),
-        uploadResult: v.object({
-          public_id: v.string(),
-          secure_url: v.string(),
-          url: v.string(),
-          format: v.string(),
-          width: v.optional(v.number()),
-          height: v.optional(v.number()),
-          bytes: v.optional(v.number()),
-          created_at: v.optional(v.string()),
-          tags: v.optional(v.array(v.string())),
-          folder: v.optional(v.string()),
-          original_filename: v.optional(v.string()),
-          access_mode: v.optional(v.string()),
-          api_key: v.optional(v.string()),
-          asset_id: v.optional(v.string()),
-          etag: v.optional(v.string()),
-          existing: v.optional(v.boolean()),
-          placeholder: v.optional(v.boolean()),
-          resource_type: v.optional(v.string()),
-          signature: v.optional(v.string()),
-          type: v.optional(v.string()),
-          version: v.optional(v.number()),
-          version_id: v.optional(v.string()),
-        }),
+        /** Type-safe Cloudinary upload response based on official API documentation */
+        uploadResult: vCloudinaryUploadResponse,
         userId: v.optional(v.string()),
         folder: v.optional(v.string()),
       },
