@@ -4,16 +4,16 @@ This example demonstrates how to use the Cloudinary component with Convex for im
 
 ## Features Demonstrated
 
-- 📤 **File Upload**: Two upload methods based on file size
-  - 📄 **Base64 Upload**: Small files (< 5MB) through Convex
-  - 🚀 **Direct Upload**: Large files (≥ 5MB) directly to Cloudinary
-- 🖼️ **Image Display**: Show images with real-time transformations
-- 🎛️ **Transformation Controls**: Adjust width, height, and crop settings
-- 🗑️ **Asset Management**: Delete images from Cloudinary and database
-- 📊 **Upload Progress**: Real-time progress tracking for direct uploads
-- 📱 **Responsive Design**: Works on desktop and mobile
-- 🚀 **Direct API Calls**: No SDK dependencies, better performance and control
-- 🔒 **Secure**: Built-in signature generation for authenticated uploads
+- **File Upload**: Two upload methods based on file size
+  - **Base64 Upload**: Small files (< 5MB) through Convex
+  - **Direct Upload**: Large files (>= 5MB) directly to Cloudinary
+- **Image Display**: Show images with real-time transformations
+- **Transformation Controls**: Adjust width, height, and crop settings
+- **Asset Management**: Delete images from Cloudinary and database
+- **Upload Progress**: Real-time progress tracking for direct uploads
+- **Responsive Design**: Works on desktop and mobile
+- **Direct API Calls**: No SDK dependencies, better performance and control
+- **Secure**: Built-in signature generation for authenticated uploads
 
 ## Setup Instructions
 
@@ -78,7 +78,7 @@ The example app automatically chooses the upload method based on file size:
 ### Automatic Method Selection
 
 - **Small files (< 5MB)**: Uses base64 upload through Convex
-- **Large files (≥ 5MB)**: Uses direct upload to Cloudinary
+- **Large files (>= 5MB)**: Uses direct upload to Cloudinary
 
 ### Testing Different File Sizes
 
@@ -93,7 +93,7 @@ The example app automatically chooses the upload method based on file size:
    - Upload goes directly to Cloudinary
    - Progress bar shows real-time upload progress
 
-### ⚠️ Cloudinary Plan Limits
+### Cloudinary Plan Limits
 
 Be aware of your Cloudinary plan's file size limits when testing:
 
@@ -115,39 +115,42 @@ Be aware of your Cloudinary plan's file size limits when testing:
 
 ## Usage Examples
 
-### Basic Upload
+### Using React Hooks
 
 ```typescript
-import { CloudinaryUpload } from "cloudinary-component/react";
-import { components } from "../convex/_generated/api";
+import { useQuery, useAction } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { useCloudinaryUpload } from "@imaxis/cloudinary-convex/react";
 
-<CloudinaryUpload
-  component={components.cloudinary}
-  onUploadComplete={(result) => console.log('Uploaded:', result)}
-  options={{ folder: "my-uploads", tags: ["demo"] }}
-/>
-```
+function MyComponent() {
+  // List images using Convex query
+  const images = useQuery(api.cloudinary.listAssets, { limit: 20 });
 
-### Display with Transformations
+  // Upload with progress tracking
+  const { upload, isUploading, progress } = useCloudinaryUpload(
+    api.cloudinary.upload
+  );
 
-```typescript
-import { CloudinaryImage } from "cloudinary-component/react";
+  const handleUpload = async (file: File) => {
+    const result = await upload(file, { folder: "uploads" });
+    console.log("Uploaded:", result);
+  };
 
-<CloudinaryImage
-  component={components.cloudinary}
-  publicId="sample-image"
-  transformation={{
-    width: 300,
-    height: 300,
-    crop: "fill"
-  }}
-  alt="Sample image"
-/>
+  return (
+    <div>
+      <input type="file" onChange={(e) => handleUpload(e.target.files![0])} />
+      {isUploading && <p>Uploading... {progress}%</p>}
+      {images?.map((img) => (
+        <img key={img.publicId} src={img.secureUrl} alt="" />
+      ))}
+    </div>
+  );
+}
 ```
 
 ### Server-side Operations
 
-**✅ Recommended: Direct Component Usage (No SDK, No Wrappers)**
+**Direct Component Usage (No SDK, No Wrappers)**
 
 ```typescript
 import { action, query } from "./_generated/server";

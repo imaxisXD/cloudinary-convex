@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * Generated `api` utility.
+ * Generated `ComponentApi` utility.
  *
  * THIS CODE IS AUTOMATICALLY GENERATED.
  *
@@ -8,46 +8,21 @@
  * @module
  */
 
-import type * as example from "../example.js";
-
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
-
-declare const fullApi: ApiFromModules<{
-  example: typeof example;
-}>;
+import type { FunctionReference } from "convex/server";
 
 /**
- * A utility for referencing Convex functions in your app's public API.
+ * A utility for referencing a Convex component's exposed API.
  *
+ * Useful when expecting a parameter like `components.myComponent`.
  * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
+ * ```ts
+ * async function myFunction(ctx: QueryCtx, component: ComponentApi) {
+ *   return ctx.runQuery(component.someFile.someQuery, { ...args });
+ * }
  * ```
  */
-export declare const api: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "public">
->;
-
-/**
- * A utility for referencing Convex functions in your app's internal API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = internal.myModule.myFunction;
- * ```
- */
-export declare const internal: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "internal">
->;
-
-export declare const components: {
-  cloudinary: {
+export type ComponentApi<Name extends string | undefined = string | undefined> =
+  {
     lib: {
       createPendingUpload: FunctionReference<
         "mutation",
@@ -59,7 +34,8 @@ export declare const components: {
           tags?: Array<string>;
           userId?: string;
         },
-        { publicId: string; uploadId: string }
+        { publicId: string; uploadId: string },
+        Name
       >;
       deleteAsset: FunctionReference<
         "action",
@@ -68,13 +44,15 @@ export declare const components: {
           config: { apiKey: string; apiSecret: string; cloudName: string };
           publicId: string;
         },
-        { error?: string; success: boolean }
+        { error?: string; success: boolean },
+        Name
       >;
       deletePendingUpload: FunctionReference<
         "mutation",
         "internal",
         { uploadId: string },
-        { error?: string; success: boolean }
+        { error?: string; success: boolean },
+        Name
       >;
       finalizeUpload: FunctionReference<
         "mutation",
@@ -137,7 +115,8 @@ export declare const components: {
           };
           userId?: string;
         },
-        string
+        string,
+        Name
       >;
       generateUploadCredentials: FunctionReference<
         "action",
@@ -188,7 +167,8 @@ export declare const components: {
             transformation?: string;
           };
           uploadUrl: string;
-        }
+        },
+        Name
       >;
       getAsset: FunctionReference<
         "query",
@@ -217,7 +197,8 @@ export declare const components: {
           uploadedAt: number;
           userId?: string;
           width?: number;
-        } | null
+        } | null,
+        Name
       >;
       getUploadsByStatus: FunctionReference<
         "query",
@@ -247,7 +228,8 @@ export declare const components: {
           uploadedAt: number;
           userId?: string;
           width?: number;
-        }>
+        }>,
+        Name
       >;
       listAssets: FunctionReference<
         "query",
@@ -281,7 +263,8 @@ export declare const components: {
           uploadedAt: number;
           userId?: string;
           width?: number;
-        }>
+        }>,
+        Name
       >;
       transform: FunctionReference<
         "query",
@@ -317,7 +300,8 @@ export declare const components: {
             zoom?: number;
           };
         },
-        { secureUrl: string; transformedUrl: string }
+        { secureUrl: string; transformedUrl: string },
+        Name
       >;
       updateAsset: FunctionReference<
         "mutation",
@@ -343,7 +327,8 @@ export declare const components: {
           uploadedAt: number;
           userId?: string;
           width?: number;
-        } | null
+        } | null,
+        Name
       >;
       updateUploadStatus: FunctionReference<
         "mutation",
@@ -380,7 +365,8 @@ export declare const components: {
           uploadedAt: number;
           userId?: string;
           width?: number;
-        } | null
+        } | null,
+        Name
       >;
       upload: FunctionReference<
         "action",
@@ -430,8 +416,8 @@ export declare const components: {
           secureUrl?: string;
           success: boolean;
           width?: number;
-        }
+        },
+        Name
       >;
     };
   };
-};

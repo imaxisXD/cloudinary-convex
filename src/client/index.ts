@@ -1,12 +1,7 @@
 import { mutationGeneric, queryGeneric, actionGeneric } from "convex/server";
 import { v } from "convex/values";
-import type { Mounts } from "../component/_generated/api.js";
-import type {
-  UseApi,
-  RunMutationCtx,
-  RunQueryCtx,
-  RunActionCtx,
-} from "./types.js";
+import type { ComponentApi } from "../component/_generated/component.js";
+import type { RunMutationCtx, RunQueryCtx, RunActionCtx } from "./types.js";
 import {
   uploadDirectToCloudinary,
   isLargeFile,
@@ -28,6 +23,25 @@ export interface ClientCloudinaryTransformation
 // For backward compatibility, re-export as CloudinaryTransformation
 export type { ClientCloudinaryTransformation as CloudinaryTransformation };
 
+/**
+ * Upload status for reactive tracking.
+ * - "pending": Upload record created, upload not yet started
+ * - "uploading": Upload is in progress
+ * - "completed": Upload finished successfully
+ * - "failed": Upload failed
+ */
+export type UploadStatus = "pending" | "uploading" | "completed" | "failed";
+
+/**
+ * Validator for upload status (for use in Convex functions)
+ */
+export const vUploadStatus = v.union(
+  v.literal("pending"),
+  v.literal("uploading"),
+  v.literal("completed"),
+  v.literal("failed")
+);
+
 export interface CloudinaryAsset {
   publicId: string;
   cloudinaryUrl: string;
@@ -41,6 +55,8 @@ export interface CloudinaryAsset {
   tags?: string[];
   folder?: string;
   metadata?: Record<string, unknown>;
+  status: UploadStatus;
+  errorMessage?: string;
   uploadedAt: number;
   updatedAt: number;
   userId?: string;
@@ -70,7 +86,7 @@ export interface CloudinaryConfig {
   apiSecret: string;
 }
 
-export type CloudinaryComponent = UseApi<Mounts>;
+export type CloudinaryComponent = ComponentApi;
 
 export class CloudinaryClient {
   public config: CloudinaryConfig;
@@ -508,6 +524,118 @@ export class CloudinaryClient {
     options?: FileValidationOptions
   ): Promise<void> {
     return validateFile(file, options);
+  }
+
+  // ============================================================================
+  // UPLOAD STATUS TRACKING METHODS
+  // ============================================================================
+
+  /**
+   * Create a pending upload record before starting the upload.
+   * This enables reactive status tracking via queries.
+   *
+   * @param ctx - The Convex mutation context
+   * @param options - Upload options (filename, folder, tags, etc.)
+   * @returns The upload ID and temporary public ID for tracking
+   *
+   * @example
+   * ```ts
+   * // Create pending record
+   * const { uploadId, publicId } = await cloudinary.createPendingUpload(ctx, {
+   *   filename: "photo.jpg",
+   *   folder: "uploads",
+   * });
+   *
+   * // Update to uploading
+   * await cloudinary.updateUploadStatus(ctx, uploadId, "uploading");
+   *
+   * // Perform upload...
+   *
+   * // Update to completed with final data
+   * await cloudinary.updateUploadStatus(ctx, uploadId, "completed", {
+   *   publicId: result.public_id,
+   *   secureUrl: result.secure_url,
+   * });
+   * ```
+   */
+  async createPendingUpload(
+    ctx: RunMutationCtx,
+    options?: {
+      filename?: string;
+      folder?: string;
+      tags?: string[];
+      userId?: string;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<{ uploadId: string; publicId: string }> {
+    return ctx.runMutation(this.component.lib.createPendingUpload, {
+      filename: options?.filename,
+      folder: options?.folder,
+      tags: options?.tags,
+      userId: options?.userId,
+      metadata: options?.metadata,
+    });
+  }
+
+  /**
+   * Update the status of an upload.
+   * Use this to transition from pending -> uploading -> completed/failed
+   *
+   * @param ctx - The Convex mutation context
+   * @param uploadId - The upload ID returned from createPendingUpload
+   * @param status - The new status
+   * @param data - Optional data to update when completing
+   */
+  async updateUploadStatus(
+    ctx: RunMutationCtx,
+    uploadId: string,
+    status: UploadStatus,
+    data?: {
+      errorMessage?: string;
+      publicId?: string;
+      cloudinaryUrl?: string;
+      secureUrl?: string;
+      format?: string;
+      width?: number;
+      height?: number;
+      bytes?: number;
+    }
+  ) {
+    return ctx.runMutation(this.component.lib.updateUploadStatus, {
+      uploadId,
+      status,
+      ...data,
+    });
+  }
+
+  /**
+   * Get uploads by status for a specific user.
+   * Enables reactive queries to track upload progress.
+   *
+   * @param ctx - The Convex query context
+   * @param status - Filter by upload status
+   * @param options - Optional filters
+   */
+  async getUploadsByStatus(
+    ctx: RunQueryCtx,
+    status: UploadStatus,
+    options?: { userId?: string; limit?: number }
+  ) {
+    return ctx.runQuery(this.component.lib.getUploadsByStatus, {
+      status,
+      userId: options?.userId,
+      limit: options?.limit,
+    });
+  }
+
+  /**
+   * Delete a pending or failed upload.
+   * Only allows deletion of non-completed uploads.
+   */
+  async deletePendingUpload(ctx: RunMutationCtx, uploadId: string) {
+    return ctx.runMutation(this.component.lib.deletePendingUpload, {
+      uploadId,
+    });
   }
 
   /**
@@ -1042,6 +1170,85 @@ export function makeCloudinaryAPI(
           userId: args.userId,
           folder: args.folder,
         });
+      },
+    }),
+
+    // ========================================================================
+    // UPLOAD STATUS TRACKING
+    // ========================================================================
+
+    /**
+     * Create a pending upload record before starting the upload.
+     * This enables reactive status tracking via queries.
+     */
+    createPendingUpload: mutationGeneric({
+      args: {
+        filename: v.optional(v.string()),
+        folder: v.optional(v.string()),
+        tags: v.optional(v.array(v.string())),
+        userId: v.optional(v.string()),
+        metadata: v.optional(v.any()),
+      },
+      returns: v.object({
+        uploadId: v.string(),
+        publicId: v.string(),
+      }),
+      handler: async (ctx, args) => {
+        return ctx.runMutation(component.lib.createPendingUpload, args);
+      },
+    }),
+
+    /**
+     * Update the status of an upload.
+     * Use this to transition from pending -> uploading -> completed/failed
+     */
+    updateUploadStatus: mutationGeneric({
+      args: {
+        uploadId: v.string(),
+        status: vUploadStatus,
+        errorMessage: v.optional(v.string()),
+        publicId: v.optional(v.string()),
+        cloudinaryUrl: v.optional(v.string()),
+        secureUrl: v.optional(v.string()),
+        format: v.optional(v.string()),
+        width: v.optional(v.number()),
+        height: v.optional(v.number()),
+        bytes: v.optional(v.number()),
+      },
+      returns: v.union(vAssetResponse, v.null()),
+      handler: async (ctx, args) => {
+        return ctx.runMutation(component.lib.updateUploadStatus, args);
+      },
+    }),
+
+    /**
+     * Get uploads by status for reactive tracking.
+     */
+    getUploadsByStatus: queryGeneric({
+      args: {
+        status: vUploadStatus,
+        userId: v.optional(v.string()),
+        limit: v.optional(v.number()),
+      },
+      returns: v.array(vAssetResponse),
+      handler: async (ctx, args) => {
+        return ctx.runQuery(component.lib.getUploadsByStatus, args);
+      },
+    }),
+
+    /**
+     * Delete a pending or failed upload.
+     */
+    deletePendingUpload: mutationGeneric({
+      args: {
+        uploadId: v.string(),
+      },
+      returns: v.object({
+        success: v.boolean(),
+        error: v.optional(v.string()),
+      }),
+      handler: async (ctx, args) => {
+        return ctx.runMutation(component.lib.deletePendingUpload, args);
       },
     }),
   };

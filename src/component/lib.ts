@@ -81,6 +81,23 @@ export const vTransformation = v.object({
 export type Transformation = Infer<typeof vTransformation>;
 
 /**
+ * Validator for upload status.
+ * - "pending": Upload record created, upload not yet started
+ * - "uploading": Upload is in progress
+ * - "completed": Upload finished successfully
+ * - "failed": Upload failed
+ */
+export const vUploadStatus = v.union(
+  v.literal("pending"),
+  v.literal("uploading"),
+  v.literal("completed"),
+  v.literal("failed")
+);
+
+/** TypeScript type for upload status */
+export type UploadStatus = Infer<typeof vUploadStatus>;
+
+/**
  * Validator for a Cloudinary asset stored in the database (internal use).
  * Includes all fields returned when querying assets.
  * Use this within the component where Id<"assets"> is valid.
@@ -100,6 +117,8 @@ export const vAsset = v.object({
   tags: v.optional(v.array(v.string())),
   folder: v.optional(v.string()),
   metadata: v.optional(v.any()),
+  status: vUploadStatus,
+  errorMessage: v.optional(v.string()),
   uploadedAt: v.number(),
   updatedAt: v.number(),
   userId: v.optional(v.string()),
@@ -128,6 +147,8 @@ export const vAssetResponse = v.object({
   tags: v.optional(v.array(v.string())),
   folder: v.optional(v.string()),
   metadata: v.optional(v.any()),
+  status: vUploadStatus,
+  errorMessage: v.optional(v.string()),
   uploadedAt: v.number(),
   updatedAt: v.number(),
   userId: v.optional(v.string()),
@@ -698,15 +719,191 @@ export const storeAsset = internalMutation({
     folder: v.optional(v.string()),
     metadata: v.optional(v.any()),
     userId: v.optional(v.string()),
+    status: v.optional(vUploadStatus),
   },
   returns: v.id("assets"),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const { status, ...rest } = args;
     return await ctx.db.insert("assets", {
-      ...args,
+      ...rest,
+      status: status ?? "completed",
       uploadedAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * Create a pending upload record before starting the upload.
+ * This enables reactive status tracking via queries.
+ *
+ * @returns The asset ID that can be used to track/update the upload
+ */
+export const createPendingUpload = mutation({
+  args: {
+    filename: v.optional(v.string()),
+    folder: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    userId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+  },
+  returns: v.object({
+    uploadId: v.string(),
+    publicId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    // Generate a temporary public ID for the pending upload
+    const tempPublicId = `pending_${now}_${Math.random().toString(36).substring(2, 9)}`;
+
+    const assetId = await ctx.db.insert("assets", {
+      publicId: tempPublicId,
+      cloudinaryUrl: "",
+      secureUrl: "",
+      originalFilename: args.filename,
+      format: "",
+      folder: args.folder,
+      tags: args.tags,
+      metadata: args.metadata,
+      userId: args.userId,
+      status: "pending" as const,
+      uploadedAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      uploadId: assetId,
+      publicId: tempPublicId,
+    };
+  },
+});
+
+/**
+ * Update the status of an upload.
+ * Use this to transition from pending -> uploading -> completed/failed
+ */
+export const updateUploadStatus = mutation({
+  args: {
+    uploadId: v.string(),
+    status: vUploadStatus,
+    errorMessage: v.optional(v.string()),
+    // Optional fields to update when completing
+    publicId: v.optional(v.string()),
+    cloudinaryUrl: v.optional(v.string()),
+    secureUrl: v.optional(v.string()),
+    format: v.optional(v.string()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    bytes: v.optional(v.number()),
+  },
+  returns: v.union(vAsset, v.null()),
+  handler: async (ctx, args) => {
+    const assetId = args.uploadId as Id<"assets">;
+    const asset = await ctx.db.get(assetId);
+
+    if (!asset) {
+      return null;
+    }
+
+    const updates: Record<string, unknown> = {
+      status: args.status,
+      updatedAt: Date.now(),
+    };
+
+    if (args.errorMessage !== undefined) {
+      updates.errorMessage = args.errorMessage;
+    }
+    if (args.publicId !== undefined) {
+      updates.publicId = args.publicId;
+    }
+    if (args.cloudinaryUrl !== undefined) {
+      updates.cloudinaryUrl = args.cloudinaryUrl;
+    }
+    if (args.secureUrl !== undefined) {
+      updates.secureUrl = args.secureUrl;
+    }
+    if (args.format !== undefined) {
+      updates.format = args.format;
+    }
+    if (args.width !== undefined) {
+      updates.width = args.width;
+    }
+    if (args.height !== undefined) {
+      updates.height = args.height;
+    }
+    if (args.bytes !== undefined) {
+      updates.bytes = args.bytes;
+    }
+
+    await ctx.db.patch(assetId, updates);
+
+    return {
+      ...asset,
+      ...updates,
+    } as typeof asset;
+  },
+});
+
+/**
+ * Get uploads by status for a specific user.
+ * Enables reactive queries to track upload progress.
+ */
+export const getUploadsByStatus = query({
+  args: {
+    status: vUploadStatus,
+    userId: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(vAsset),
+  handler: async (ctx, args) => {
+    if (args.userId) {
+      return await ctx.db
+        .query("assets")
+        .withIndex("by_userId_and_status", (q) =>
+          q.eq("userId", args.userId!).eq("status", args.status)
+        )
+        .order("desc")
+        .take(args.limit ?? 50);
+    }
+
+    return await ctx.db
+      .query("assets")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .order("desc")
+      .take(args.limit ?? 50);
+  },
+});
+
+/**
+ * Delete a pending or failed upload.
+ * Only allows deletion of non-completed uploads.
+ */
+export const deletePendingUpload = mutation({
+  args: {
+    uploadId: v.string(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const assetId = args.uploadId as Id<"assets">;
+    const asset = await ctx.db.get(assetId);
+
+    if (!asset) {
+      return { success: false, error: "Upload not found" };
+    }
+
+    if (asset.status === "completed") {
+      return {
+        success: false,
+        error: "Cannot delete completed uploads. Use deleteAsset instead.",
+      };
+    }
+
+    await ctx.db.delete(assetId);
+    return { success: true };
   },
 });
 

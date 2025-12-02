@@ -1,14 +1,18 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import React, { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { FunctionReference } from "convex/server";
 import type {
   CloudinaryTransformation,
   UploadOptions,
   ListAssetsOptions,
   CloudinaryAsset,
+  UploadStatus,
 } from "../client/index.js";
+
+// Re-export UploadStatus type for convenience
+export type { UploadStatus } from "../client/index.js";
 
 // Upload result type matching the backend response
 export interface UploadResult {
@@ -364,236 +368,180 @@ export function useCloudinaryOperations(
   };
 }
 
+// ============================================================================
+// UPLOAD STATUS TRACKING HOOKS
+// ============================================================================
+
 /**
- * React component for displaying Cloudinary images with transformations.
+ * Hook for tracking upload status with reactive updates.
+ *
+ * This hook enables reactive status tracking across browser tabs/devices.
+ * Use it to show upload progress indicators or manage failed uploads.
  *
  * @example
  * ```tsx
  * import { api } from "../convex/_generated/api";
  *
- * function MyComponent() {
+ * function UploadStatusIndicator() {
+ *   const { uploads, isLoading } = useUploadStatus(
+ *     api.cloudinary.getUploadsByStatus,
+ *     "uploading",
+ *     { userId: currentUserId }
+ *   );
+ *
+ *   if (isLoading) return <div>Loading...</div>;
+ *
  *   return (
- *     <CloudinaryImage
- *       transformFn={api.cloudinary.transform}
- *       publicId="my-image-id"
- *       transformation={{ width: 300, height: 300, crop: "fill" }}
- *       alt="My image"
- *     />
+ *     <div>
+ *       {uploads.length > 0 && (
+ *         <p>{uploads.length} upload(s) in progress...</p>
+ *       )}
+ *     </div>
  *   );
  * }
  * ```
  */
-export interface CloudinaryImageProps
-  extends React.ImgHTMLAttributes<HTMLImageElement> {
-  transformFn: FunctionReference<
+export function useUploadStatus(
+  getUploadsByStatusFn: FunctionReference<
     "query",
     "public",
     Record<string, unknown>,
-    TransformResult
-  >;
-  publicId: string;
-  transformation?: CloudinaryTransformation;
-  fallback?: React.ReactNode;
-  loader?: React.ReactNode;
+    CloudinaryAsset[]
+  >,
+  status: UploadStatus,
+  options?: { userId?: string; limit?: number }
+) {
+  const queryArgs = { status, ...options };
+  const uploads = useQuery(
+    getUploadsByStatusFn,
+    queryArgs as Record<string, unknown>
+  );
+
+  return {
+    uploads: uploads || [],
+    isLoading: uploads === undefined,
+    hasPending: (uploads || []).some((u) => u.status === "pending"),
+    hasUploading: (uploads || []).some((u) => u.status === "uploading"),
+    hasFailed: (uploads || []).some((u) => u.status === "failed"),
+  };
 }
 
-export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
-  transformFn,
-  publicId,
-  transformation,
-  fallback,
-  loader,
-  alt = "",
-  className,
-  style,
-  ...imgProps
-}: CloudinaryImageProps) => {
-  const { transformedUrl, secureUrl, isLoading } = useCloudinaryImage(
-    transformFn,
-    publicId,
-    transformation
-  );
-  const [_imageLoading, setImageLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
-
-  if (isLoading) {
-    return loader ? <>{loader}</> : <div>Loading...</div>;
-  }
-
-  if (imageError && fallback) {
-    return <>{fallback}</>;
-  }
-
-  return (
-    <img
-      {...imgProps}
-      src={secureUrl || transformedUrl}
-      alt={alt}
-      className={className}
-      style={style}
-      onLoad={() => setImageLoading(false)}
-      onError={() => setImageError(true)}
-    />
-  );
-};
-
 /**
- * File upload component with drag and drop.
+ * Hook for managing pending uploads with full CRUD operations.
+ *
+ * Use this for a complete upload workflow with status tracking:
+ * 1. Create a pending upload record
+ * 2. Update status to "uploading" when starting
+ * 3. Update to "completed" with final data, or "failed" with error
  *
  * @example
  * ```tsx
  * import { api } from "../convex/_generated/api";
  *
- * function MyComponent() {
- *   return (
- *     <CloudinaryUpload
- *       uploadFn={api.cloudinary.upload}
- *       onUploadComplete={(result) => console.log("Uploaded:", result)}
- *       options={{ folder: "uploads" }}
- *     />
+ * function TrackedUpload() {
+ *   const {
+ *     createPending,
+ *     updateStatus,
+ *     deletePending,
+ *   } = usePendingUploads(
+ *     api.cloudinary.createPendingUpload,
+ *     api.cloudinary.updateUploadStatus,
+ *     api.cloudinary.deletePendingUpload
  *   );
+ *
+ *   const handleUpload = async (file: File) => {
+ *     // Create pending record (visible to other tabs)
+ *     const { uploadId } = await createPending({ filename: file.name });
+ *
+ *     // Update to uploading
+ *     await updateStatus(uploadId, "uploading");
+ *
+ *     try {
+ *       // Perform actual upload...
+ *       const result = await uploadToCloudinary(file);
+ *
+ *       // Update to completed
+ *       await updateStatus(uploadId, "completed", {
+ *         publicId: result.public_id,
+ *         secureUrl: result.secure_url,
+ *       });
+ *     } catch (error) {
+ *       // Update to failed
+ *       await updateStatus(uploadId, "failed", {
+ *         errorMessage: error.message,
+ *       });
+ *     }
+ *   };
  * }
  * ```
  */
-export interface CloudinaryUploadProps {
-  uploadFn: FunctionReference<
-    "action",
+export function usePendingUploads(
+  createPendingFn: FunctionReference<
+    "mutation",
     "public",
     Record<string, unknown>,
-    UploadResult
-  >;
-  onUploadComplete?: (result: UploadResult) => void;
-  onUploadError?: (error: string) => void;
-  options?: UploadOptions;
-  accept?: string;
-  multiple?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
+    { uploadId: string; publicId: string }
+  >,
+  updateStatusFn: FunctionReference<
+    "mutation",
+    "public",
+    Record<string, unknown>,
+    CloudinaryAsset | null
+  >,
+  deletePendingFn: FunctionReference<
+    "mutation",
+    "public",
+    Record<string, unknown>,
+    { success: boolean; error?: string }
+  >
+) {
+  const createMutation = useMutation(createPendingFn);
+  const updateMutation = useMutation(updateStatusFn);
+  const deleteMutation = useMutation(deletePendingFn);
+
+  const createPending = useCallback(
+    async (options?: {
+      filename?: string;
+      folder?: string;
+      tags?: string[];
+      userId?: string;
+      metadata?: Record<string, unknown>;
+    }) => {
+      return createMutation(options || {});
+    },
+    [createMutation]
+  );
+
+  const updateStatus = useCallback(
+    async (
+      uploadId: string,
+      status: UploadStatus,
+      data?: {
+        errorMessage?: string;
+        publicId?: string;
+        cloudinaryUrl?: string;
+        secureUrl?: string;
+        format?: string;
+        width?: number;
+        height?: number;
+        bytes?: number;
+      }
+    ) => {
+      return updateMutation({ uploadId, status, ...data });
+    },
+    [updateMutation]
+  );
+
+  const deletePending = useCallback(
+    async (uploadId: string) => {
+      return deleteMutation({ uploadId });
+    },
+    [deleteMutation]
+  );
+
+  return {
+    createPending,
+    updateStatus,
+    deletePending,
+  };
 }
-
-export const CloudinaryUpload: React.FC<CloudinaryUploadProps> = ({
-  uploadFn,
-  onUploadComplete,
-  onUploadError,
-  options,
-  accept = "image/*",
-  multiple = false,
-  className,
-  style,
-  children,
-}) => {
-  const { upload, isUploading, progress, error } =
-    useCloudinaryUpload(uploadFn);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFiles = useCallback(
-    async (files: FileList) => {
-      const fileArray = Array.from(files);
-
-      for (const file of fileArray) {
-        try {
-          const result = await upload(file, options);
-          onUploadComplete?.(result);
-        } catch (err) {
-          const errorMessage =
-            err instanceof Error ? err.message : "Upload failed";
-          onUploadError?.(errorMessage);
-        }
-      }
-    },
-    [upload, options, onUploadComplete, onUploadError]
-  );
-
-  const handleClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files.length > 0) {
-        void handleFiles(e.target.files);
-      }
-    },
-    [handleFiles]
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        void handleFiles(e.dataTransfer.files);
-      }
-    },
-    [handleFiles]
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  return (
-    <div
-      className={`cloudinary-upload ${isDragOver ? "drag-over" : ""} ${className || ""}`}
-      style={{
-        border: "2px dashed #ccc",
-        borderRadius: "8px",
-        padding: "20px",
-        textAlign: "center",
-        cursor: "pointer",
-        backgroundColor: isDragOver ? "#f0f0f0" : "transparent",
-        ...style,
-      }}
-      onClick={handleClick}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        multiple={multiple}
-        onChange={handleFileChange}
-        style={{ display: "none" }}
-      />
-
-      {children || (
-        <div>
-          <p>Drag and drop files here, or click to select</p>
-          {isUploading && (
-            <div>
-              <p>Uploading... {progress}%</p>
-              <div
-                style={{
-                  width: "100%",
-                  backgroundColor: "#e0e0e0",
-                  borderRadius: "4px",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${progress}%`,
-                    height: "8px",
-                    backgroundColor: "#4CAF50",
-                    transition: "width 0.3s ease",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-          {error && <p style={{ color: "red" }}>Error: {error}</p>}
-        </div>
-      )}
-    </div>
-  );
-};

@@ -176,8 +176,9 @@ import {
   useCloudinaryAssets,
   useCloudinaryAsset,
   useCloudinaryOperations,
-  CloudinaryImage,
-  CloudinaryUpload,
+  // Upload status tracking hooks
+  useUploadStatus,
+  usePendingUploads,
 } from "@imaxis/cloudinary-convex/react";
 ```
 
@@ -254,27 +255,59 @@ function AssetManager({ publicId }: { publicId: string }) {
 }
 ```
 
-### Pre-built Components
+## Using with Cloudinary React SDK
+
+For advanced image rendering features like responsive images, lazy loading, and automatic format optimization, we recommend using Cloudinary's official React SDK alongside this component.
+
+**Install Cloudinary React SDK:**
+
+```bash
+npm install @cloudinary/react @cloudinary/url-gen
+```
+
+**Use your component for data, Cloudinary SDK for rendering:**
 
 ```tsx
-// Drag-and-drop upload component
-<CloudinaryUpload
-  uploadFn={api.cloudinary.upload}
-  onUploadComplete={(result) => console.log("Uploaded:", result)}
-  onUploadError={(error) => console.error("Error:", error)}
-  options={{ folder: "uploads" }}
-/>
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { Cloudinary } from "@cloudinary/url-gen";
+import { AdvancedImage, lazyload, responsive } from "@cloudinary/react";
 
-// Image with transformations
-<CloudinaryImage
-  transformFn={api.cloudinary.transform}
-  publicId="my-image-id"
-  transformation={{ width: 400, height: 300, crop: "fill" }}
-  alt="My image"
-  loader={<Spinner />}
-  fallback={<Placeholder />}
-/>
+// Initialize Cloudinary (client-side only needs cloud name)
+const cld = new Cloudinary({ cloud: { cloudName: "your-cloud-name" } });
+
+function ImageGallery() {
+  // Your component: reactive asset list from Convex
+  const assets = useQuery(api.cloudinary.listAssets, { limit: 20 });
+
+  return (
+    <div className="gallery">
+      {assets?.map((asset) => (
+        <AdvancedImage
+          key={asset.publicId}
+          cldImg={cld.image(asset.publicId)}
+          plugins={[lazyload(), responsive()]}
+          // Cloudinary SDK handles:
+          // - Responsive sizing
+          // - Lazy loading
+          // - Automatic format (WebP/AVIF)
+          // - Retina displays
+        />
+      ))}
+    </div>
+  );
+}
 ```
+
+**Benefits of this approach:**
+
+| This Component                          | Cloudinary React SDK                   |
+| --------------------------------------- | -------------------------------------- |
+| Stores asset metadata in Convex         | Optimized image rendering              |
+| Real-time queries with `useQuery`       | Responsive images                      |
+| Secure server-side uploads              | Lazy loading                           |
+| Two upload methods (base64 + direct)    | Automatic format selection (WebP/AVIF) |
+| Asset management (delete, update, list) | Blur placeholders                      |
 
 ## Image Transformations
 
@@ -447,43 +480,6 @@ const result = await cloudinary.transform(ctx, "my-image-id", {
 }
 ```
 
-### Using with React Components
-
-```tsx
-import { CloudinaryImage } from "@imaxis/cloudinary-convex/react";
-
-// Profile avatar
-<CloudinaryImage
-  transformFn={api.cloudinary.transform}
-  publicId="user-photo"
-  transformation={{
-    width: 100,
-    height: 100,
-    crop: "thumb",
-    gravity: "face",
-    radius: "max",
-    quality: "auto",
-  }}
-  alt="User avatar"
-  className="rounded-full"
-/>
-
-// Hero banner with auto-optimization
-<CloudinaryImage
-  transformFn={api.cloudinary.transform}
-  publicId="hero-banner"
-  transformation={{
-    width: 1920,
-    height: 600,
-    crop: "fill",
-    gravity: "auto",
-    quality: "auto",
-    format: "auto",
-  }}
-  alt="Hero banner"
-/>
-```
-
 ## Handling Large Files (Direct Upload)
 
 For files larger than ~10MB, use the direct upload flow to bypass Convex's 16MB argument size limit. This uploads files directly from the browser to Cloudinary, with only metadata stored in Convex.
@@ -585,6 +581,110 @@ function LargeFileUpload() {
 }
 ```
 
+## Upload Status Tracking
+
+The component supports reactive upload status tracking, allowing you to show upload progress across browser tabs and devices.
+
+### Status Values
+
+| Status        | Description                            |
+| ------------- | -------------------------------------- |
+| `"pending"`   | Upload record created, not yet started |
+| `"uploading"` | Upload is in progress                  |
+| `"completed"` | Upload finished successfully           |
+| `"failed"`    | Upload failed (check `errorMessage`)   |
+
+### Backend Setup
+
+```ts
+// convex/cloudinary.ts
+export const {
+  // ... other functions
+  createPendingUpload, // Create a pending upload record
+  updateUploadStatus, // Update status (pending -> uploading -> completed/failed)
+  getUploadsByStatus, // Query uploads by status (reactive!)
+  deletePendingUpload, // Delete pending/failed uploads
+} = makeCloudinaryAPI(components.cloudinary);
+```
+
+### React Implementation
+
+```tsx
+import { api } from "../convex/_generated/api";
+import { useQuery, useMutation } from "convex/react";
+import {
+  useUploadStatus,
+  usePendingUploads,
+} from "@imaxis/cloudinary-convex/react";
+
+// Show uploads in progress (reactive - updates across tabs!)
+function UploadIndicator({ userId }: { userId: string }) {
+  const { uploads, isLoading, hasUploading } = useUploadStatus(
+    api.cloudinary.getUploadsByStatus,
+    "uploading",
+    { userId }
+  );
+
+  if (isLoading) return null;
+  if (!hasUploading) return null;
+
+  return (
+    <div className="upload-indicator">
+      {uploads.length} upload(s) in progress...
+    </div>
+  );
+}
+
+// Full upload workflow with status tracking
+function TrackedUpload() {
+  const { createPending, updateStatus, deletePending } = usePendingUploads(
+    api.cloudinary.createPendingUpload,
+    api.cloudinary.updateUploadStatus,
+    api.cloudinary.deletePendingUpload
+  );
+
+  const handleUpload = async (file: File) => {
+    // Step 1: Create pending record (visible to other tabs immediately!)
+    const { uploadId } = await createPending({
+      filename: file.name,
+      folder: "uploads",
+    });
+
+    // Step 2: Update to uploading
+    await updateStatus(uploadId, "uploading");
+
+    try {
+      // Step 3: Perform actual upload...
+      const result = await performUpload(file);
+
+      // Step 4: Update to completed with final data
+      await updateStatus(uploadId, "completed", {
+        publicId: result.public_id,
+        secureUrl: result.secure_url,
+        width: result.width,
+        height: result.height,
+      });
+    } catch (error) {
+      // Handle failure
+      await updateStatus(uploadId, "failed", {
+        errorMessage: error.message,
+      });
+    }
+  };
+
+  return (
+    <input type="file" onChange={(e) => handleUpload(e.target.files![0])} />
+  );
+}
+```
+
+### Benefits
+
+- **Real-time updates**: Status changes are reactive - all tabs/devices see updates instantly
+- **Multi-tab awareness**: Show "upload in progress" indicators across browser tabs
+- **Failed upload recovery**: Query failed uploads and retry them
+- **Progress tracking**: Track uploads even if the user navigates away
+
 ## Database Schema
 
 The component manages an `assets` table:
@@ -594,6 +694,8 @@ The component manages an `assets` table:
   _id: Id<"assets">,
   publicId: string,
   secureUrl: string,
+  status: "pending" | "uploading" | "completed" | "failed",
+  errorMessage?: string,
   // ... metadata (width, height, format, tags, etc.)
   userId?: string,
 }
@@ -610,6 +712,7 @@ import {
   vTransformResult,
   vDeleteResult,
   vTransformation,
+  vUploadStatus, // "pending" | "uploading" | "completed" | "failed"
 } from "@imaxis/cloudinary-convex";
 ```
 
@@ -619,6 +722,7 @@ import {
 - **[Example Repo (Studio App)](https://github.com/imaxisXD/cloudinary-convex-studio)**
 - **[Convex Documentation](https://docs.convex.dev)**
 - **[Cloudinary API Reference](https://cloudinary.com/documentation/image_upload_api_reference)**
+- **[Cloudinary React SDK](https://cloudinary.com/documentation/react_integration)**
 - **[GitHub Repository](https://github.com/imaxisXD/cloudinary-convex)**
 
 ## License
