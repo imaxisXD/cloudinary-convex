@@ -176,7 +176,6 @@ import {
   useCloudinaryAssets,
   useCloudinaryAsset,
   useCloudinaryOperations,
-  // Upload status tracking hooks
   useUploadStatus,
   usePendingUploads,
 } from "@imaxis/cloudinary-convex/react";
@@ -712,7 +711,7 @@ import {
   vTransformResult,
   vDeleteResult,
   vTransformation,
-  vUploadStatus, // "pending" | "uploading" | "completed" | "failed"
+  vUploadStatus,
 } from "@imaxis/cloudinary-convex";
 ```
 
