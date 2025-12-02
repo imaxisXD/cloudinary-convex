@@ -36,6 +36,7 @@ export const vTransformation = v.object({
   radius: v.optional(v.union(v.number(), v.string())),
   overlay: v.optional(v.string()),
   effect: v.optional(v.string()),
+  angle: v.optional(v.number()),
 });
 
 /** TypeScript type for Cloudinary transformations, derived from vTransformation validator */

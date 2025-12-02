@@ -278,57 +278,101 @@ function AssetManager({ publicId }: { publicId: string }) {
 
 ## Handling Large Files (Direct Upload)
 
-For files >10MB, use the direct upload flow to bypass Convex limits.
+For files larger than ~10MB, use the direct upload flow to bypass Convex's 16MB argument size limit. This uploads files directly from the browser to Cloudinary, with only metadata stored in Convex.
 
-**Backend:**
+### Backend Setup
+
+If you're using `makeCloudinaryAPI`, the required functions are already exported:
 
 ```ts
-// Already included in makeCloudinaryAPI:
-// - generateUploadCredentials
-// - finalizeUpload
+// convex/cloudinary.ts
+export const {
+  // ... other functions
+  generateUploadCredentials, // Step 1: Get signed credentials
+  finalizeUpload, // Step 3: Store metadata
+} = makeCloudinaryAPI(components.cloudinary);
 ```
 
-**React:**
+### React Implementation
 
 ```tsx
 import { api } from "../convex/_generated/api";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
+import { useState } from "react";
 
 function LargeFileUpload() {
+  const [progress, setProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+
   const getCredentials = useAction(api.cloudinary.generateUploadCredentials);
   const finalizeUpload = useMutation(api.cloudinary.finalizeUpload);
 
   const handleLargeUpload = async (file: File) => {
-    // Step 1: Get signed credentials
-    const credentials = await getCredentials({ folder: "large-uploads" });
+    if (!file) return;
 
-    // Step 2: Upload directly to Cloudinary
-    const formData = new FormData();
-    formData.append("file", file);
-    Object.entries(credentials.uploadParams).forEach(([key, value]) => {
-      if (value) formData.append(key, value);
-    });
+    setIsUploading(true);
+    setProgress(0);
 
-    const response = await fetch(credentials.uploadUrl, {
-      method: "POST",
-      body: formData,
-    });
-    const result = await response.json();
+    try {
+      // Step 1: Get signed upload credentials from Convex
+      const credentials = await getCredentials({
+        folder: "large-uploads",
+        tags: ["user-upload"],
+      });
 
-    // Step 3: Store metadata in Convex
-    await finalizeUpload({
-      publicId: result.public_id,
-      uploadResult: result,
-    });
+      // Step 2: Upload directly to Cloudinary with progress tracking
+      const formData = new FormData();
+      formData.append("file", file);
+      Object.entries(credentials.uploadParams).forEach(([key, value]) => {
+        if (value) formData.append(key, value);
+      });
 
-    console.log("Large file uploaded:", result.secure_url);
+      const response = await new Promise<Response>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", credentials.uploadUrl);
+
+        // Track upload progress
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setProgress(Math.round((event.loaded / event.total) * 100));
+          }
+        };
+
+        xhr.onload = () => resolve(new Response(xhr.responseText));
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.send(formData);
+      });
+
+      const result = await response.json();
+
+      // Step 3: Store metadata in Convex database
+      await finalizeUpload({
+        publicId: result.public_id,
+        uploadResult: result,
+      });
+
+      console.log("Large file uploaded:", result.secure_url);
+    } catch (error) {
+      console.error("Upload failed:", error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
-    <input
-      type="file"
-      onChange={(e) => handleLargeUpload(e.target.files?.[0]!)}
-    />
+    <div>
+      <input
+        type="file"
+        onChange={(e) => handleLargeUpload(e.target.files?.[0]!)}
+        disabled={isUploading}
+      />
+      {isUploading && (
+        <div>
+          <p>Uploading... {progress}%</p>
+          <progress value={progress} max="100" />
+        </div>
+      )}
+    </div>
   );
 }
 ```

@@ -40,6 +40,7 @@ export interface CloudinaryTransformation {
   radius?: number | string;
   overlay?: string;
   effect?: string;
+  angle?: number;
 }
 
 export interface CloudinaryUploadOptions {
@@ -105,6 +106,7 @@ export function transformationToString(
   if (transformation.radius) parts.push(`r_${transformation.radius}`);
   if (transformation.overlay) parts.push(`l_${transformation.overlay}`);
   if (transformation.effect) parts.push(`e_${transformation.effect}`);
+  if (transformation.angle !== undefined) parts.push(`a_${transformation.angle}`);
 
   return parts.join(",");
 }
