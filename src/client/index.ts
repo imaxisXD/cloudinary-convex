@@ -73,10 +73,37 @@ export interface CloudinaryConfig {
 export type CloudinaryComponent = UseApi<Mounts>;
 
 export class CloudinaryClient {
+  public config: CloudinaryConfig;
+
+  /**
+   * Create a CloudinaryClient instance.
+   *
+   * @param component - The Cloudinary component reference from `components.cloudinary`
+   * @param config - Optional configuration. If not provided, falls back to environment variables.
+   *
+   * @example
+   * ```ts
+   * // Using environment variables (recommended)
+   * const cloudinary = new CloudinaryClient(components.cloudinary);
+   *
+   * // Or with explicit config
+   * const cloudinary = new CloudinaryClient(components.cloudinary, {
+   *   cloudName: "my-cloud",
+   *   apiKey: "my-key",
+   *   apiSecret: "my-secret",
+   * });
+   * ```
+   */
   constructor(
     public component: CloudinaryComponent,
-    public config: CloudinaryConfig
-  ) {}
+    config?: Partial<CloudinaryConfig>
+  ) {
+    this.config = {
+      cloudName: config?.cloudName ?? process.env.CLOUDINARY_CLOUD_NAME!,
+      apiKey: config?.apiKey ?? process.env.CLOUDINARY_API_KEY!,
+      apiSecret: config?.apiSecret ?? process.env.CLOUDINARY_API_SECRET!,
+    };
+  }
 
   /**
    * Factory method to create a configured Cloudinary client
@@ -498,22 +525,11 @@ export class CloudinaryClient {
           filename: v.optional(v.string()),
           folder: v.optional(v.string()),
           tags: v.optional(v.array(v.string())),
-          transformation: v.optional(
-            v.object({
-              width: v.optional(v.number()),
-              height: v.optional(v.number()),
-              crop: v.optional(v.string()),
-              quality: v.optional(v.string()),
-              format: v.optional(v.string()),
-              gravity: v.optional(v.string()),
-              radius: v.optional(v.union(v.number(), v.string())),
-              overlay: v.optional(v.string()),
-              effect: v.optional(v.string()),
-            })
-          ),
+          transformation: v.optional(vTransformation),
           publicId: v.optional(v.string()),
           userId: v.optional(v.string()),
         },
+        returns: vUploadResult,
         handler: async (ctx, args) => {
           return await this.upload(ctx, args.base64Data, args);
         },
@@ -521,24 +537,16 @@ export class CloudinaryClient {
       transform: queryGeneric({
         args: {
           publicId: v.string(),
-          transformation: v.object({
-            width: v.optional(v.number()),
-            height: v.optional(v.number()),
-            crop: v.optional(v.string()),
-            quality: v.optional(v.string()),
-            format: v.optional(v.string()),
-            gravity: v.optional(v.string()),
-            radius: v.optional(v.union(v.number(), v.string())),
-            overlay: v.optional(v.string()),
-            effect: v.optional(v.string()),
-          }),
+          transformation: vTransformation,
         },
+        returns: vTransformResult,
         handler: async (ctx, args) => {
           return await this.transform(ctx, args.publicId, args.transformation);
         },
       }),
       deleteAsset: actionGeneric({
         args: { publicId: v.string() },
+        returns: vDeleteResult,
         handler: async (ctx, args) => {
           return await this.delete(ctx, args.publicId);
         },
@@ -554,12 +562,14 @@ export class CloudinaryClient {
           ),
           order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
         },
+        returns: v.array(vAssetResponse),
         handler: async (ctx, args) => {
           return await this.list(ctx, args);
         },
       }),
       getAsset: queryGeneric({
         args: { publicId: v.string() },
+        returns: v.union(vAssetResponse, v.null()),
         handler: async (ctx, args) => {
           return await this.getAsset(ctx, args.publicId);
         },
@@ -570,6 +580,7 @@ export class CloudinaryClient {
           tags: v.optional(v.array(v.string())),
           metadata: v.optional(v.any()),
         },
+        returns: v.union(vAssetResponse, v.null()),
         handler: async (ctx, args) => {
           return await this.updateAsset(ctx, args.publicId, {
             tags: args.tags,
@@ -579,4 +590,360 @@ export class CloudinaryClient {
       }),
     };
   }
+}
+
+// ============================================================================
+// VALIDATORS FOR PUBLIC API
+// ============================================================================
+
+/**
+ * Validator for transformation options.
+ */
+export const vTransformation = v.object({
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  crop: v.optional(v.string()),
+  quality: v.optional(v.string()),
+  format: v.optional(v.string()),
+  gravity: v.optional(v.string()),
+  radius: v.optional(v.union(v.number(), v.string())),
+  overlay: v.optional(v.string()),
+  effect: v.optional(v.string()),
+});
+
+/**
+ * Validator for upload result.
+ */
+export const vUploadResult = v.object({
+  success: v.boolean(),
+  publicId: v.optional(v.string()),
+  secureUrl: v.optional(v.string()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  format: v.optional(v.string()),
+  bytes: v.optional(v.number()),
+  error: v.optional(v.string()),
+});
+
+/**
+ * Validator for transform result.
+ */
+export const vTransformResult = v.object({
+  transformedUrl: v.string(),
+  secureUrl: v.string(),
+});
+
+/**
+ * Validator for delete result.
+ */
+export const vDeleteResult = v.object({
+  success: v.boolean(),
+  error: v.optional(v.string()),
+});
+
+/**
+ * Validator for asset response (when returned to external consumers).
+ * IDs are serialized as strings when crossing component boundaries.
+ */
+export const vAssetResponse = v.object({
+  _id: v.string(),
+  _creationTime: v.number(),
+  publicId: v.string(),
+  cloudinaryUrl: v.string(),
+  secureUrl: v.string(),
+  originalFilename: v.optional(v.string()),
+  format: v.string(),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  bytes: v.optional(v.number()),
+  transformations: v.optional(v.array(v.any())),
+  tags: v.optional(v.array(v.string())),
+  folder: v.optional(v.string()),
+  metadata: v.optional(v.any()),
+  uploadedAt: v.number(),
+  updatedAt: v.number(),
+  userId: v.optional(v.string()),
+});
+
+// ============================================================================
+// FUNCTION CREATOR FOR APPS
+// ============================================================================
+
+/**
+ * Create public API functions that apps can re-export to expose to React clients.
+ *
+ * **Important:** Components cannot be called directly from React. This function
+ * creates wrapper functions that run in your app's environment and can be called
+ * from React via `useQuery`, `useMutation`, and `useAction`.
+ *
+ * @param component - The Cloudinary component reference from `components.cloudinary`
+ * @param config - Optional configuration. If not provided, falls back to environment variables.
+ * @returns Object with all API functions ready to be exported
+ *
+ * @example
+ * ```ts
+ * // convex/cloudinary.ts
+ * import { makeCloudinaryAPI } from "@imaxis/cloudinary-convex";
+ * import { components } from "./_generated/api";
+ *
+ * // Using environment variables (recommended)
+ * export const {
+ *   upload,
+ *   transform,
+ *   deleteAsset,
+ *   listAssets,
+ *   getAsset,
+ *   updateAsset,
+ * } = makeCloudinaryAPI(components.cloudinary);
+ *
+ * // Or with explicit config
+ * export const { upload, listAssets } = makeCloudinaryAPI(components.cloudinary, {
+ *   cloudName: "my-cloud",
+ *   apiKey: "my-key",
+ *   apiSecret: "my-secret",
+ * });
+ * ```
+ *
+ * Then in React:
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ * import { useCloudinaryUpload } from "@imaxis/cloudinary-convex/react";
+ *
+ * function MyComponent() {
+ *   const { upload, isUploading } = useCloudinaryUpload(api.cloudinary.upload);
+ *   // ...
+ * }
+ * ```
+ */
+export function makeCloudinaryAPI(
+  component: CloudinaryComponent,
+  config?: Partial<CloudinaryConfig>
+) {
+  const resolvedConfig: CloudinaryConfig = {
+    cloudName: config?.cloudName ?? process.env.CLOUDINARY_CLOUD_NAME!,
+    apiKey: config?.apiKey ?? process.env.CLOUDINARY_API_KEY!,
+    apiSecret: config?.apiSecret ?? process.env.CLOUDINARY_API_SECRET!,
+  };
+
+  return {
+    /**
+     * Upload a file to Cloudinary using base64 data.
+     */
+    upload: actionGeneric({
+      args: {
+        base64Data: v.string(),
+        filename: v.optional(v.string()),
+        folder: v.optional(v.string()),
+        tags: v.optional(v.array(v.string())),
+        transformation: v.optional(vTransformation),
+        publicId: v.optional(v.string()),
+        userId: v.optional(v.string()),
+      },
+      returns: vUploadResult,
+      handler: async (ctx, args) => {
+        const { base64Data, transformation, ...restArgs } = args;
+        const backendTransformation = transformation
+          ? {
+              ...transformation,
+              quality:
+                transformation.quality !== undefined
+                  ? String(transformation.quality)
+                  : undefined,
+            }
+          : undefined;
+
+        return ctx.runAction(component.lib.upload, {
+          base64Data,
+          config: resolvedConfig,
+          transformation: backendTransformation,
+          ...restArgs,
+        });
+      },
+    }),
+
+    /**
+     * Generate a transformed URL for an existing asset.
+     */
+    transform: queryGeneric({
+      args: {
+        publicId: v.string(),
+        transformation: vTransformation,
+      },
+      returns: vTransformResult,
+      handler: async (ctx, args) => {
+        const backendTransformation = {
+          ...args.transformation,
+          quality:
+            args.transformation.quality !== undefined
+              ? String(args.transformation.quality)
+              : undefined,
+        };
+
+        return ctx.runQuery(component.lib.transform, {
+          publicId: args.publicId,
+          transformation: backendTransformation,
+          config: resolvedConfig,
+        });
+      },
+    }),
+
+    /**
+     * Delete an asset from Cloudinary and the database.
+     */
+    deleteAsset: actionGeneric({
+      args: { publicId: v.string() },
+      returns: vDeleteResult,
+      handler: async (ctx, args) => {
+        return ctx.runAction(component.lib.deleteAsset, {
+          publicId: args.publicId,
+          config: resolvedConfig,
+        });
+      },
+    }),
+
+    /**
+     * List assets with optional filtering.
+     */
+    listAssets: queryGeneric({
+      args: {
+        userId: v.optional(v.string()),
+        folder: v.optional(v.string()),
+        tags: v.optional(v.array(v.string())),
+        limit: v.optional(v.number()),
+        orderBy: v.optional(
+          v.union(v.literal("uploadedAt"), v.literal("updatedAt"))
+        ),
+        order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+      },
+      returns: v.array(vAssetResponse),
+      handler: async (ctx, args) => {
+        return ctx.runQuery(component.lib.listAssets, {
+          config: resolvedConfig,
+          ...args,
+        });
+      },
+    }),
+
+    /**
+     * Get a single asset by public ID.
+     */
+    getAsset: queryGeneric({
+      args: { publicId: v.string() },
+      returns: v.union(vAssetResponse, v.null()),
+      handler: async (ctx, args) => {
+        return ctx.runQuery(component.lib.getAsset, {
+          publicId: args.publicId,
+          config: resolvedConfig,
+        });
+      },
+    }),
+
+    /**
+     * Update asset metadata.
+     */
+    updateAsset: mutationGeneric({
+      args: {
+        publicId: v.string(),
+        tags: v.optional(v.array(v.string())),
+        metadata: v.optional(v.any()),
+      },
+      returns: v.union(vAssetResponse, v.null()),
+      handler: async (ctx, args) => {
+        return ctx.runMutation(component.lib.updateAsset, {
+          publicId: args.publicId,
+          tags: args.tags,
+          metadata: args.metadata,
+        });
+      },
+    }),
+
+    /**
+     * Generate signed upload credentials for direct browser-to-Cloudinary uploads.
+     */
+    generateUploadCredentials: actionGeneric({
+      args: {
+        filename: v.optional(v.string()),
+        folder: v.optional(v.string()),
+        tags: v.optional(v.array(v.string())),
+        transformation: v.optional(vTransformation),
+        publicId: v.optional(v.string()),
+        userId: v.optional(v.string()),
+      },
+      returns: v.object({
+        uploadUrl: v.string(),
+        uploadParams: v.object({
+          api_key: v.string(),
+          timestamp: v.string(),
+          signature: v.string(),
+          folder: v.optional(v.string()),
+          tags: v.optional(v.string()),
+          transformation: v.optional(v.string()),
+          public_id: v.optional(v.string()),
+        }),
+      }),
+      handler: async (ctx, args) => {
+        const backendOptions = {
+          ...args,
+          transformation: args.transformation
+            ? {
+                ...args.transformation,
+                quality:
+                  args.transformation.quality !== undefined
+                    ? String(args.transformation.quality)
+                    : undefined,
+              }
+            : undefined,
+        };
+
+        return ctx.runAction(component.lib.generateUploadCredentials, {
+          config: resolvedConfig,
+          ...backendOptions,
+        });
+      },
+    }),
+
+    /**
+     * Finalize a direct upload by storing the asset metadata in the database.
+     */
+    finalizeUpload: mutationGeneric({
+      args: {
+        publicId: v.string(),
+        uploadResult: v.object({
+          public_id: v.string(),
+          secure_url: v.string(),
+          url: v.string(),
+          format: v.string(),
+          width: v.optional(v.number()),
+          height: v.optional(v.number()),
+          bytes: v.optional(v.number()),
+          created_at: v.optional(v.string()),
+          tags: v.optional(v.array(v.string())),
+          folder: v.optional(v.string()),
+          original_filename: v.optional(v.string()),
+          access_mode: v.optional(v.string()),
+          api_key: v.optional(v.string()),
+          asset_id: v.optional(v.string()),
+          etag: v.optional(v.string()),
+          existing: v.optional(v.boolean()),
+          placeholder: v.optional(v.boolean()),
+          resource_type: v.optional(v.string()),
+          signature: v.optional(v.string()),
+          type: v.optional(v.string()),
+          version: v.optional(v.number()),
+          version_id: v.optional(v.string()),
+        }),
+        userId: v.optional(v.string()),
+        folder: v.optional(v.string()),
+      },
+      returns: v.string(), // Returns asset ID as string
+      handler: async (ctx, args) => {
+        return ctx.runMutation(component.lib.finalizeUpload, {
+          publicId: args.publicId,
+          uploadResult: args.uploadResult,
+          userId: args.userId,
+          folder: args.folder,
+        });
+      },
+    }),
+  };
 }

@@ -2,11 +2,11 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import React, { useState, useCallback, useRef } from "react";
+import type { FunctionReference } from "convex/server";
 import type {
   CloudinaryTransformation,
   UploadOptions,
   ListAssetsOptions,
-  CloudinaryComponent,
   CloudinaryAsset,
 } from "../client/index.js";
 
@@ -22,10 +22,114 @@ export interface UploadResult {
   error?: string;
 }
 
-// Upload hook with progress tracking
-export function useCloudinaryUpload(component: CloudinaryComponent) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const uploadAction = useAction((component.lib as any).upload);
+// Transform result type
+export interface TransformResult {
+  transformedUrl: string;
+  secureUrl: string;
+}
+
+// Delete result type
+export interface DeleteResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Type definitions for the API functions that apps should create using makeCloudinaryAPI.
+ * These are the function references that React hooks expect.
+ */
+export interface CloudinaryAPI {
+  upload: FunctionReference<
+    "action",
+    "public",
+    {
+      base64Data: string;
+      filename?: string;
+      folder?: string;
+      tags?: string[];
+      transformation?: CloudinaryTransformation;
+      publicId?: string;
+      userId?: string;
+    },
+    UploadResult
+  >;
+  transform: FunctionReference<
+    "query",
+    "public",
+    {
+      publicId: string;
+      transformation: CloudinaryTransformation;
+    },
+    TransformResult
+  >;
+  listAssets: FunctionReference<
+    "query",
+    "public",
+    {
+      userId?: string;
+      folder?: string;
+      tags?: string[];
+      limit?: number;
+      orderBy?: "uploadedAt" | "updatedAt";
+      order?: "asc" | "desc";
+    },
+    CloudinaryAsset[]
+  >;
+  getAsset: FunctionReference<
+    "query",
+    "public",
+    { publicId: string },
+    CloudinaryAsset | null
+  >;
+  deleteAsset: FunctionReference<
+    "action",
+    "public",
+    { publicId: string },
+    DeleteResult
+  >;
+  updateAsset: FunctionReference<
+    "mutation",
+    "public",
+    {
+      publicId: string;
+      tags?: string[];
+      metadata?: Record<string, unknown>;
+    },
+    CloudinaryAsset | null
+  >;
+}
+
+/**
+ * Upload hook with progress tracking.
+ *
+ * **Important:** This hook requires a function reference from your app's API,
+ * NOT the component reference directly. Components cannot be called from React.
+ *
+ * @example
+ * ```tsx
+ * // First, create API functions in your Convex backend:
+ * // convex/cloudinary.ts
+ * import { makeCloudinaryAPI } from "@imaxis/cloudinary-convex";
+ * export const { upload } = makeCloudinaryAPI(components.cloudinary, config);
+ *
+ * // Then use in React:
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent() {
+ *   const { upload, isUploading, progress } = useCloudinaryUpload(api.cloudinary.upload);
+ *   // ...
+ * }
+ * ```
+ */
+export function useCloudinaryUpload(
+  uploadFn: FunctionReference<
+    "action",
+    "public",
+    Record<string, unknown>,
+    UploadResult
+  >
+) {
+  const uploadAction = useAction(uploadFn);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -97,16 +201,35 @@ export function useCloudinaryUpload(component: CloudinaryComponent) {
   };
 }
 
-// Hook for generating transformed image URLs
+/**
+ * Hook for generating transformed image URLs.
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent({ publicId }: { publicId: string }) {
+ *   const { transformedUrl, isLoading } = useCloudinaryImage(
+ *     api.cloudinary.transform,
+ *     publicId,
+ *     { width: 300, height: 300, crop: "fill" }
+ *   );
+ *   // ...
+ * }
+ * ```
+ */
 export function useCloudinaryImage(
-  component: CloudinaryComponent,
+  transformFn: FunctionReference<
+    "query",
+    "public",
+    Record<string, unknown>,
+    TransformResult
+  >,
   publicId: string | null,
   transformation?: CloudinaryTransformation
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
-  const libTransform = (component.lib as any).transform;
   const transformedUrl = useQuery(
-    libTransform,
+    transformFn,
     publicId && transformation ? { publicId, transformation } : "skip"
   );
 
@@ -117,14 +240,33 @@ export function useCloudinaryImage(
   };
 }
 
-// Hook for listing assets
+/**
+ * Hook for listing assets.
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent() {
+ *   const { assets, isLoading } = useCloudinaryAssets(api.cloudinary.listAssets, {
+ *     folder: "uploads",
+ *     limit: 20,
+ *   });
+ *   // ...
+ * }
+ * ```
+ */
 export function useCloudinaryAssets(
-  component: CloudinaryComponent,
+  listAssetsFn: FunctionReference<
+    "query",
+    "public",
+    Record<string, unknown>,
+    CloudinaryAsset[]
+  >,
   options?: ListAssetsOptions
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
-  const libListAssets = (component.lib as any).listAssets;
-  const assets = useQuery(libListAssets, options || {}) as CloudinaryAsset[] | undefined;
+  const queryArgs = options ? { ...options } : {};
+  const assets = useQuery(listAssetsFn, queryArgs as Record<string, unknown>);
 
   return {
     assets: assets || [],
@@ -132,17 +274,29 @@ export function useCloudinaryAssets(
   };
 }
 
-// Hook for getting a single asset
+/**
+ * Hook for getting a single asset.
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent({ publicId }: { publicId: string }) {
+ *   const { asset, isLoading } = useCloudinaryAsset(api.cloudinary.getAsset, publicId);
+ *   // ...
+ * }
+ * ```
+ */
 export function useCloudinaryAsset(
-  component: CloudinaryComponent,
+  getAssetFn: FunctionReference<
+    "query",
+    "public",
+    Record<string, unknown>,
+    CloudinaryAsset | null
+  >,
   publicId: string | null
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Component lib requires dynamic typing
-  const libGetAsset = (component.lib as any).getAsset;
-  const asset = useQuery(
-    libGetAsset,
-    publicId ? { publicId } : "skip"
-  ) as CloudinaryAsset | null | undefined;
+  const asset = useQuery(getAssetFn, publicId ? { publicId } : "skip");
 
   return {
     asset,
@@ -150,12 +304,42 @@ export function useCloudinaryAsset(
   };
 }
 
-// Hook for asset operations (delete, update)
-export function useCloudinaryOperations(component: CloudinaryComponent) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deleteAction = useAction((component.lib as any).deleteAsset);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updateMutation = useMutation((component.lib as any).updateAsset);
+/**
+ * Hook for asset operations (delete, update).
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent() {
+ *   const { deleteAsset, updateAsset } = useCloudinaryOperations(
+ *     api.cloudinary.deleteAsset,
+ *     api.cloudinary.updateAsset
+ *   );
+ *
+ *   const handleDelete = async (publicId: string) => {
+ *     await deleteAsset(publicId);
+ *   };
+ *   // ...
+ * }
+ * ```
+ */
+export function useCloudinaryOperations(
+  deleteAssetFn: FunctionReference<
+    "action",
+    "public",
+    Record<string, unknown>,
+    DeleteResult
+  >,
+  updateAssetFn: FunctionReference<
+    "mutation",
+    "public",
+    Record<string, unknown>,
+    CloudinaryAsset | null
+  >
+) {
+  const deleteAction = useAction(deleteAssetFn);
+  const updateMutation = useMutation(updateAssetFn);
 
   const deleteAsset = useCallback(
     async (publicId: string) => {
@@ -165,7 +349,10 @@ export function useCloudinaryOperations(component: CloudinaryComponent) {
   );
 
   const updateAsset = useCallback(
-    async (publicId: string, updates: { tags?: string[]; metadata?: Record<string, unknown> }) => {
+    async (
+      publicId: string,
+      updates: { tags?: string[]; metadata?: Record<string, unknown> }
+    ) => {
       return updateMutation({ publicId, ...updates });
     },
     [updateMutation]
@@ -177,10 +364,33 @@ export function useCloudinaryOperations(component: CloudinaryComponent) {
   };
 }
 
-// React component for displaying Cloudinary images with transformations
+/**
+ * React component for displaying Cloudinary images with transformations.
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent() {
+ *   return (
+ *     <CloudinaryImage
+ *       transformFn={api.cloudinary.transform}
+ *       publicId="my-image-id"
+ *       transformation={{ width: 300, height: 300, crop: "fill" }}
+ *       alt="My image"
+ *     />
+ *   );
+ * }
+ * ```
+ */
 export interface CloudinaryImageProps
   extends React.ImgHTMLAttributes<HTMLImageElement> {
-  component: CloudinaryComponent;
+  transformFn: FunctionReference<
+    "query",
+    "public",
+    Record<string, unknown>,
+    TransformResult
+  >;
   publicId: string;
   transformation?: CloudinaryTransformation;
   fallback?: React.ReactNode;
@@ -188,7 +398,7 @@ export interface CloudinaryImageProps
 }
 
 export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
-  component,
+  transformFn,
   publicId,
   transformation,
   fallback,
@@ -199,7 +409,7 @@ export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
   ...imgProps
 }: CloudinaryImageProps) => {
   const { transformedUrl, secureUrl, isLoading } = useCloudinaryImage(
-    component,
+    transformFn,
     publicId,
     transformation
   );
@@ -227,9 +437,31 @@ export const CloudinaryImage: React.FC<CloudinaryImageProps> = ({
   );
 };
 
-// File upload component with drag and drop
+/**
+ * File upload component with drag and drop.
+ *
+ * @example
+ * ```tsx
+ * import { api } from "../convex/_generated/api";
+ *
+ * function MyComponent() {
+ *   return (
+ *     <CloudinaryUpload
+ *       uploadFn={api.cloudinary.upload}
+ *       onUploadComplete={(result) => console.log("Uploaded:", result)}
+ *       options={{ folder: "uploads" }}
+ *     />
+ *   );
+ * }
+ * ```
+ */
 export interface CloudinaryUploadProps {
-  component: CloudinaryComponent;
+  uploadFn: FunctionReference<
+    "action",
+    "public",
+    Record<string, unknown>,
+    UploadResult
+  >;
   onUploadComplete?: (result: UploadResult) => void;
   onUploadError?: (error: string) => void;
   options?: UploadOptions;
@@ -241,7 +473,7 @@ export interface CloudinaryUploadProps {
 }
 
 export const CloudinaryUpload: React.FC<CloudinaryUploadProps> = ({
-  component,
+  uploadFn,
   onUploadComplete,
   onUploadError,
   options,
@@ -252,7 +484,7 @@ export const CloudinaryUpload: React.FC<CloudinaryUploadProps> = ({
   children,
 }) => {
   const { upload, isUploading, progress, error } =
-    useCloudinaryUpload(component);
+    useCloudinaryUpload(uploadFn);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

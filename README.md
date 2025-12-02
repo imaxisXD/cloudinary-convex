@@ -72,22 +72,75 @@ npx convex env set CLOUDINARY_API_SECRET <your_api_secret>
 
 ## Quick Start
 
-### Using CloudinaryClient (Recommended)
+### Option 1: Using makeCloudinaryAPI (Recommended for React Apps)
+
+This approach creates public API functions that can be called from React clients.
+
+**Backend (convex/cloudinary.ts):**
+
+```ts
+import { makeCloudinaryAPI } from "@imaxis/cloudinary-convex";
+import { components } from "./_generated/api";
+
+// Export all API functions - uses environment variables automatically
+export const {
+  upload,
+  transform,
+  deleteAsset,
+  listAssets,
+  getAsset,
+  updateAsset,
+  generateUploadCredentials,
+  finalizeUpload,
+} = makeCloudinaryAPI(components.cloudinary);
+```
+
+**React Client:**
+
+```tsx
+import { api } from "../convex/_generated/api";
+import { useQuery, useAction } from "convex/react";
+import { useCloudinaryUpload } from "@imaxis/cloudinary-convex/react";
+
+function ImageGallery() {
+  // List images
+  const images = useQuery(api.cloudinary.listAssets, { limit: 20 });
+
+  // Upload with progress tracking
+  const { upload, isUploading, progress } = useCloudinaryUpload(
+    api.cloudinary.upload
+  );
+
+  const handleUpload = async (file: File) => {
+    const base64 = await fileToBase64(file);
+    const result = await upload(base64, { folder: "uploads" });
+    console.log("Uploaded:", result.secureUrl);
+  };
+
+  return (
+    <div>
+      {isUploading && <p>Uploading... {progress}%</p>}
+      {images?.map((img) => (
+        <img key={img.publicId} src={img.secureUrl} alt="" />
+      ))}
+    </div>
+  );
+}
+```
+
+### Option 2: Using CloudinaryClient (For Server-Side Logic)
+
+This approach is ideal when you need more control or want to build custom logic.
 
 ```ts
 // convex/images.ts
 import { action, query } from "./_generated/server";
 import { components } from "./_generated/api";
-import { CloudinaryClient } from "@imaxis/cloudinary-convex";
-import { vAssetResponse } from "@imaxis/cloudinary-convex/lib";
+import { CloudinaryClient, vAssetResponse } from "@imaxis/cloudinary-convex";
 import { v } from "convex/values";
 
-// Initialize client
-const cloudinary = new CloudinaryClient(components.cloudinary, {
-  cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-  apiKey: process.env.CLOUDINARY_API_KEY,
-  apiSecret: process.env.CLOUDINARY_API_SECRET,
-});
+// Initialize client - uses environment variables automatically
+const cloudinary = new CloudinaryClient(components.cloudinary);
 
 // Upload Action (Base64)
 export const uploadImage = action({
@@ -110,43 +163,174 @@ export const getImages = query({
 });
 ```
 
-### Handling Large Files (Direct Upload)
+## React Hooks
+
+The component provides React hooks for common operations. **Important:** These hooks require function references from your app's API (created via `makeCloudinaryAPI`), not the component directly.
+
+### Available Hooks
+
+```tsx
+import {
+  useCloudinaryUpload,
+  useCloudinaryImage,
+  useCloudinaryAssets,
+  useCloudinaryAsset,
+  useCloudinaryOperations,
+  CloudinaryImage,
+  CloudinaryUpload,
+} from "@imaxis/cloudinary-convex/react";
+```
+
+### Upload Hook
+
+```tsx
+import { api } from "../convex/_generated/api";
+
+function UploadButton() {
+  const { upload, isUploading, progress, error, reset } = useCloudinaryUpload(
+    api.cloudinary.upload
+  );
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const result = await upload(file, { folder: "uploads" });
+        console.log("Upload complete:", result);
+      } catch (err) {
+        console.error("Upload failed:", err);
+      }
+    }
+  };
+
+  return (
+    <div>
+      <input type="file" onChange={handleFileChange} disabled={isUploading} />
+      {isUploading && <p>Uploading... {progress}%</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
+    </div>
+  );
+}
+```
+
+### Image Transformation Hook
+
+```tsx
+function TransformedImage({ publicId }: { publicId: string }) {
+  const { transformedUrl, isLoading } = useCloudinaryImage(
+    api.cloudinary.transform,
+    publicId,
+    { width: 300, height: 300, crop: "fill" }
+  );
+
+  if (isLoading) return <div>Loading...</div>;
+  return <img src={transformedUrl} alt="" />;
+}
+```
+
+### Asset Operations Hook
+
+```tsx
+function AssetManager({ publicId }: { publicId: string }) {
+  const { deleteAsset, updateAsset } = useCloudinaryOperations(
+    api.cloudinary.deleteAsset,
+    api.cloudinary.updateAsset
+  );
+
+  const handleDelete = async () => {
+    await deleteAsset(publicId);
+  };
+
+  const handleUpdateTags = async () => {
+    await updateAsset(publicId, { tags: ["featured", "hero"] });
+  };
+
+  return (
+    <div>
+      <button onClick={handleUpdateTags}>Add Tags</button>
+      <button onClick={handleDelete}>Delete</button>
+    </div>
+  );
+}
+```
+
+### Pre-built Components
+
+```tsx
+// Drag-and-drop upload component
+<CloudinaryUpload
+  uploadFn={api.cloudinary.upload}
+  onUploadComplete={(result) => console.log("Uploaded:", result)}
+  onUploadError={(error) => console.error("Error:", error)}
+  options={{ folder: "uploads" }}
+/>
+
+// Image with transformations
+<CloudinaryImage
+  transformFn={api.cloudinary.transform}
+  publicId="my-image-id"
+  transformation={{ width: 400, height: 300, crop: "fill" }}
+  alt="My image"
+  loader={<Spinner />}
+  fallback={<Placeholder />}
+/>
+```
+
+## Handling Large Files (Direct Upload)
 
 For files >10MB, use the direct upload flow to bypass Convex limits.
 
 **Backend:**
 
 ```ts
-export const getUploadCredentials = action({
-  args: { filename: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    return await cloudinary.generateUploadCredentials(ctx, {
-      folder: "large-uploads",
-    });
-  },
-});
-
-export const finalizeUpload = action({
-  args: {
-    publicId: v.string(),
-    uploadResult: v.any(), // Use vCloudinaryUploadResponse for strict typing
-  },
-  handler: async (ctx, args) => {
-    return await ctx.runMutation(components.cloudinary.lib.finalizeUpload, {
-      publicId: args.publicId,
-      uploadResult: args.uploadResult,
-    });
-  },
-});
+// Already included in makeCloudinaryAPI:
+// - generateUploadCredentials
+// - finalizeUpload
 ```
 
-**Client (React):**
+**React:**
 
 ```tsx
-const result = await cloudinary.uploadDirect(ctx, file, {
-  folder: "uploads",
-  onProgress: (progress) => setUploadProgress(progress),
-});
+import { api } from "../convex/_generated/api";
+import { useAction } from "convex/react";
+
+function LargeFileUpload() {
+  const getCredentials = useAction(api.cloudinary.generateUploadCredentials);
+  const finalizeUpload = useMutation(api.cloudinary.finalizeUpload);
+
+  const handleLargeUpload = async (file: File) => {
+    // Step 1: Get signed credentials
+    const credentials = await getCredentials({ folder: "large-uploads" });
+
+    // Step 2: Upload directly to Cloudinary
+    const formData = new FormData();
+    formData.append("file", file);
+    Object.entries(credentials.uploadParams).forEach(([key, value]) => {
+      if (value) formData.append(key, value);
+    });
+
+    const response = await fetch(credentials.uploadUrl, {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+
+    // Step 3: Store metadata in Convex
+    await finalizeUpload({
+      publicId: result.public_id,
+      uploadResult: result,
+    });
+
+    console.log("Large file uploaded:", result.secure_url);
+  };
+
+  return (
+    <input
+      type="file"
+      onChange={(e) => handleLargeUpload(e.target.files?.[0]!)}
+    />
+  );
+}
 ```
 
 ## Database Schema
@@ -161,6 +345,20 @@ The component manages an `assets` table:
   // ... metadata (width, height, format, tags, etc.)
   userId?: string,
 }
+```
+
+## Exported Validators
+
+For type-safe function definitions:
+
+```ts
+import {
+  vAssetResponse,
+  vUploadResult,
+  vTransformResult,
+  vDeleteResult,
+  vTransformation,
+} from "@imaxis/cloudinary-convex";
 ```
 
 ## Resources
