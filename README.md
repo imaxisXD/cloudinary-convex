@@ -496,6 +496,21 @@ export const {
 } = makeCloudinaryAPI(components.cloudinary);
 ```
 
+### Upload Options
+
+All upload methods (`upload`, `generateUploadCredentials`, `uploadDirect`) accept these options:
+
+| Option         | Type       | Description                                                                 |
+| -------------- | ---------- | --------------------------------------------------------------------------- |
+| `folder`       | `string`   | Cloudinary folder path (e.g., `"uploads/avatars"`)                          |
+| `tags`         | `string[]` | Tags for organization and filtering                                         |
+| `publicId`     | `string`   | Custom public ID (auto-generated if not provided)                           |
+| `uploadPreset` | `string`   | [Upload preset](https://cloudinary.com/documentation/upload_presets) name   |
+| `userId`       | `string`   | User ID for tracking ownership                                              |
+| `transformation` | `object` | Eager transformation applied during upload                                  |
+
+**Upload Presets** allow you to define upload options centrally in Cloudinary (folder, transformations, moderation, etc.) and apply them by name. When using signed uploads, the preset must be configured as "signed" in Cloudinary.
+
 ### React Implementation
 
 ```tsx
@@ -521,6 +536,7 @@ function LargeFileUpload() {
       const credentials = await getCredentials({
         folder: "large-uploads",
         tags: ["user-upload"],
+        uploadPreset: "my-preset", // Optional: apply a Cloudinary upload preset
       });
 
       // Step 2: Upload directly to Cloudinary with progress tracking

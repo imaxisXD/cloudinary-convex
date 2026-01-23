@@ -22,6 +22,7 @@ export interface DirectUploadOptions {
   transformation?: CloudinaryTransformation;
   publicId?: string;
   userId?: string;
+  uploadPreset?: string;
 }
 
 // Re-export types for convenience

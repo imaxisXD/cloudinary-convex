@@ -1099,6 +1099,7 @@ export const upload = action({
     transformation: v.optional(vTransformation),
     publicId: v.optional(v.string()),
     userId: v.optional(v.string()),
+    uploadPreset: v.optional(v.string()),
     config: v.object({
       cloudName: v.string(),
       apiKey: v.string(),
@@ -1147,6 +1148,7 @@ export const upload = action({
         tags: args.tags,
         publicId: args.publicId,
         userId: args.userId,
+        uploadPreset: args.uploadPreset,
       };
 
       if (args.transformation) {
@@ -1270,6 +1272,7 @@ export const generateUploadCredentials = action({
     transformation: v.optional(vTransformation),
     publicId: v.optional(v.string()),
     userId: v.optional(v.string()),
+    uploadPreset: v.optional(v.string()),
     config: v.object({
       cloudName: v.string(),
       apiKey: v.string(),
@@ -1286,6 +1289,7 @@ export const generateUploadCredentials = action({
       tags: v.optional(v.string()),
       transformation: v.optional(v.string()),
       public_id: v.optional(v.string()),
+      upload_preset: v.optional(v.string()),
     }),
   }),
   handler: async (ctx, args) => {
@@ -1319,6 +1323,7 @@ export const generateUploadCredentials = action({
           tags: args.tags,
           transformation: args.transformation,
           publicId: args.publicId,
+          uploadPreset: args.uploadPreset,
         }
       );
 
