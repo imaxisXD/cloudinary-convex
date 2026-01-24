@@ -198,6 +198,41 @@ describe("Cloudinary component lib", () => {
     }
   });
 
+  // Test uploadPreset is accepted in upload action
+  test("should accept uploadPreset in upload action", async () => {
+    const t = convexTest(schema, modules);
+
+    // uploadPreset should be accepted without validation errors
+    const result = await t.action(api.lib.upload, {
+      base64Data: mockImageBase64,
+      filename: "test.png",
+      uploadPreset: "my-preset",
+      config: mockConfig,
+    });
+
+    // The upload will fail due to mock credentials, but the error should NOT be about uploadPreset
+    if (!result.success && result.error) {
+      expect(result.error).not.toContain("uploadPreset");
+      expect(result.error).not.toContain("upload_preset");
+    }
+  });
+
+  // Test generateUploadCredentials includes uploadPreset
+  test("should include upload_preset in generated credentials", async () => {
+    const t = convexTest(schema, modules);
+
+    const result = await t.action(api.lib.generateUploadCredentials, {
+      folder: "test-folder",
+      uploadPreset: "my-preset",
+      config: mockConfig,
+    });
+
+    expect(result.uploadUrl).toContain("test-cloud");
+    expect(result.uploadParams.upload_preset).toBe("my-preset");
+    expect(result.uploadParams.folder).toBe("test-folder");
+    expect(result.uploadParams.signature).toBeDefined();
+  });
+
   // Note: Integration tests that require real Cloudinary credentials are skipped.
   // These tests would need real credentials to run:
   // - should upload and store asset

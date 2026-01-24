@@ -69,6 +69,7 @@ export interface UploadOptions {
   transformation?: CloudinaryTransformation;
   publicId?: string;
   userId?: string;
+  uploadPreset?: string;
 }
 
 export interface ListAssetsOptions {
@@ -656,6 +657,7 @@ export class CloudinaryClient {
           transformation: v.optional(vTransformation),
           publicId: v.optional(v.string()),
           userId: v.optional(v.string()),
+          uploadPreset: v.optional(v.string()),
         },
         returns: vUploadResult,
         handler: async (ctx, args) => {
@@ -987,6 +989,7 @@ export function makeCloudinaryAPI(
         transformation: v.optional(vTransformation),
         publicId: v.optional(v.string()),
         userId: v.optional(v.string()),
+        uploadPreset: v.optional(v.string()),
       },
       returns: vUploadResult,
       handler: async (ctx, args) => {
@@ -1117,6 +1120,7 @@ export function makeCloudinaryAPI(
         transformation: v.optional(vTransformation),
         publicId: v.optional(v.string()),
         userId: v.optional(v.string()),
+        uploadPreset: v.optional(v.string()),
       },
       returns: v.object({
         uploadUrl: v.string(),
@@ -1128,6 +1132,7 @@ export function makeCloudinaryAPI(
           tags: v.optional(v.string()),
           transformation: v.optional(v.string()),
           public_id: v.optional(v.string()),
+          upload_preset: v.optional(v.string()),
         }),
       }),
       handler: async (ctx, args) => {

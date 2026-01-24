@@ -527,6 +527,7 @@ export interface CloudinaryUploadOptions {
   publicId?: string;
   userId?: string;
   eager?: CloudinaryTransformation[];
+  uploadPreset?: string;
 }
 
 // Generate authentication signature for Cloudinary API
@@ -676,6 +677,7 @@ export async function uploadToCloudinary(
   if (options.eager && options.eager.length > 0) {
     uploadParams.eager = eagerToString(options.eager);
   }
+  if (options.uploadPreset) uploadParams.upload_preset = options.uploadPreset;
 
   // Generate signature
   const { signature, timestamp } = await generateSignature(
@@ -859,6 +861,7 @@ export async function generateDirectUploadCredentials(
     transformation?: CloudinaryTransformation;
     publicId?: string;
     resourceType?: string;
+    uploadPreset?: string;
   } = {}
 ): Promise<DirectUploadCredentials> {
   const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${options.resourceType || "image"}/upload`;
@@ -877,6 +880,7 @@ export async function generateDirectUploadCredentials(
       paramsToSign.transformation = transformationString;
     }
   }
+  if (options.uploadPreset) paramsToSign.upload_preset = options.uploadPreset;
 
   // Generate signature (without api_key)
   const { signature, timestamp } = await generateDirectUploadSignature(
@@ -903,6 +907,7 @@ export async function generateDirectUploadCredentials(
       uploadParams.transformation = transformationString;
     }
   }
+  if (options.uploadPreset) uploadParams.upload_preset = options.uploadPreset;
 
   return {
     uploadUrl,

@@ -54,6 +54,7 @@ export interface CloudinaryAPI {
       transformation?: CloudinaryTransformation;
       publicId?: string;
       userId?: string;
+      uploadPreset?: string;
     },
     UploadResult
   >;
