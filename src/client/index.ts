@@ -909,6 +909,8 @@ export const vAssetResponse = v.object({
   tags: v.optional(v.array(v.string())),
   folder: v.optional(v.string()),
   metadata: v.optional(v.any()),
+  status: vUploadStatus,
+  errorMessage: v.optional(v.string()),
   uploadedAt: v.number(),
   updatedAt: v.number(),
   userId: v.optional(v.string()),
